@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 type RouteContext = { params: Promise<{ path: string[] }> };
 const identifier = "[A-Za-z0-9_-]+";
 const readable = [
-  /^badges$/, /^visits$/, /^unlock-commands$/, /^map$/, /^activity$/,
+  /^badges$/, /^visits$/, /^unlock-commands$/, /^map$/, /^activity$/, /^sites$/,
   new RegExp(`^badges/${identifier}/progress$`),
 ];
 const writable = [

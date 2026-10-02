@@ -84,3 +84,13 @@ test("跨站写入和超大请求被拒绝，不泄露内部通信令牌", async
   assert.equal(registry.headers.get("authorization"), null);
   assert.ok(!(await registry.text()).includes("gateway-test-operator"));
 });
+
+test("免登录节点配置仍明确未实现小游戏与示意地图", async () => {
+  const response = await fetch(`${web}/api/v1/sites`);
+  assert.equal(response.status, 200);
+  const text = await response.text();
+  assert.ok(text.includes("长安城门") && text.includes("诗意庭院"));
+  assert.ok(text.includes('"geographic_map":false'));
+  const catalog = await createApi(`${web}/api/v1`).sites();
+  assert.deepEqual(catalog.sites.map(site => site.game_available), [true, false, false]);
+});

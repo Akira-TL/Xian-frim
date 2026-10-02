@@ -81,3 +81,17 @@ export const scenarioSchema = z.strictObject({
   && value.series.every((point, index) => point.minute === index), "推演时间步不连续");
 export type ScenarioRequest = z.infer<typeof scenarioRequestSchema>;
 export type ScenarioResult = z.infer<typeof scenarioSchema>;
+
+export const siteDefinitionSchema = z.strictObject({
+  site_id: siteId, name: z.string().min(1).max(32), x: z.number().min(0).max(1), y: z.number().min(0).max(1),
+  is_open: z.boolean(), reachable_sites: z.array(siteId).max(2),
+  task_name: z.string().min(1).max(32), task_prompt: z.string().min(1).max(120),
+  game_id: z.enum(["qin_formation", "gate_search", "poem_completion"]), game_available: z.boolean(),
+}).refine(value => !value.reachable_sites.includes(value.site_id)
+  && new Set(value.reachable_sites).size === value.reachable_sites.length
+  && (!value.game_available || value.game_id === "qin_formation"), "节点配置不满足首版可用性约束");
+export const siteCatalogSchema = z.strictObject({
+  version: z.number().int().positive(), source: z.literal("demo_site_configuration"), geographic_map: z.literal(false),
+  sites: z.array(siteDefinitionSchema).length(3),
+}).refine(value => new Set(value.sites.map(site => site.site_id)).size === 3, "节点配置不完整");
+export type SiteCatalog = z.infer<typeof siteCatalogSchema>;
