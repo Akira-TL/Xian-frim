@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { badgeSchema, commandSchema, envelopeSchema, stateSchema, visitSchema, type Badge } from "./contracts.ts";
+import { activitySchema, badgeSchema, commandSchema, envelopeSchema, stateSchema, visitSchema, type Badge, type DataSource } from "./contracts.ts";
 
 type UnlockRequest = { command_id: string; event_id: string; badge_id: string; device_id: string };
 type RequestBody = Badge | UnlockRequest | { nonce: string } | { device_id: string } | { challenge: string; payload_hex: string };
@@ -21,6 +21,7 @@ export function createApi(base = "/api/v1") {
   }
   const badgePath = (badge: string) => `badges/${encodeURIComponent(badge)}`;
   return {
+    activity: (source: DataSource) => request(`activity?source=${encodeURIComponent(source)}`, activitySchema),
     badges: () => request("badges", z.array(badgeSchema)),
     visits: () => request("visits", z.array(visitSchema)),
     commands: () => request("unlock-commands", z.array(commandSchema)),

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { createApi } from "../lib/api.ts";
 
 const web = process.env.CHANGAN_TEST_WEB_ORIGIN;
 assert.ok(web, "通过 scripts/web/test-gateway.sh 启动隔离服务后执行");
@@ -9,6 +10,20 @@ test("演示网页无需登录即可读取登记列表", async () => {
   assert.equal(response.status, 200);
   assert.equal(await response.text(), "[]");
   assert.equal(response.headers.get("cache-control"), "no-store");
+});
+
+test("免登录活动查询保留空数据与模拟来源边界", async () => {
+  const physical = await fetch(`${web}/api/v1/activity`);
+  assert.equal(physical.status, 200);
+  const snapshot = await createApi(`${web}/api/v1`).activity("physical_scan_simulated_site");
+  assert.ok(snapshot.progress);
+  assert.equal(snapshot.progress.verified_badges, 0);
+  assert.deepEqual(snapshot.map.sites.map(site => site.data_status),
+    ["missing", "missing", "missing"]);
+  const generated = await fetch(`${web}/api/v1/activity?source=generated_simulation`);
+  assert.equal(generated.status, 200);
+  assert.equal((await createApi(`${web}/api/v1`).activity("generated_simulation")).progress, null);
+  assert.equal(physical.headers.get("cache-control"), "no-store");
 });
 
 test("演示参与者能登记腰牌，但不能冒充终端制造实物到访", async () => {

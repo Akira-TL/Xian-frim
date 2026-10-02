@@ -29,3 +29,33 @@ export type Visit = z.infer<typeof visitSchema>;
 export type Command = z.infer<typeof commandSchema>;
 export type DeviceState = z.infer<typeof stateSchema>;
 export type Envelope = z.infer<typeof envelopeSchema>;
+
+export const sourceSchema = z.enum(["physical_scan_simulated_site", "generated_simulation"]);
+const siteId = z.enum(["A", "B", "C"]);
+const count = z.number().int().nonnegative();
+const siteStatisticsSchema = z.strictObject({
+  site_id: siteId, recent_unique_badges: count, previous_unique_badges: count,
+  change: z.number().int(), excluded_untrusted_events: count, updated_at: date.nullable(),
+  data_status: z.enum(["fresh", "stale", "missing", "untrusted"]),
+  heat: z.enum(["low", "medium", "high", "insufficient"]),
+});
+const mapSchema = z.strictObject({
+  session_id: z.literal("demo-001"), source: sourceSchema, generated_at: date,
+  window_seconds: z.literal(300), stale_after_seconds: z.literal(90), demo_thresholds: z.literal(true),
+  metric_label: z.literal("参与腰牌打卡数据；非实时在场人数"), sites: z.array(siteStatisticsSchema),
+  trend: z.array(z.strictObject({ site_id: siteId, window_start: date, window_end: date, unique_badges: count })),
+  transitions: z.array(z.strictObject({ from_site: siteId, to_site: siteId, count })),
+});
+const progressSummarySchema = z.strictObject({
+  game_id: z.literal("qin_formation"), eligible_badges: count, verified_badges: count,
+  unlocked_badges: count, completed_badges: count, collected_badges: count,
+  exhibiting_badges: count, last_verified_at: date.nullable(),
+}).refine(value => value.verified_badges <= value.eligible_badges
+  && value.unlocked_badges <= value.verified_badges && value.completed_badges <= value.unlocked_badges
+  && value.collected_badges === value.completed_badges && value.exhibiting_badges <= value.collected_badges,
+"认证计数不满足游戏进度约束");
+export const activitySchema = z.strictObject({ map: mapSchema, progress: progressSummarySchema.nullable() })
+  .refine(value => (value.map.source === "generated_simulation") === (value.progress === null),
+    "模拟来源不能包含实物游戏进度");
+export type ActivitySnapshot = z.infer<typeof activitySchema>;
+export type DataSource = z.infer<typeof sourceSchema>;
