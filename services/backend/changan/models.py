@@ -96,3 +96,51 @@ class ErrorResponse(Contract):
 
 class Health(Contract):
     status: Literal["ok"] = "ok"
+
+
+class TerminalHeartbeat(Contract):
+    terminal_id: Literal["k230-001"]
+    site_id: SiteId
+    config_version: Annotated[int, Field(ge=1)]
+    captured_at: AwareDatetime
+
+
+class HeartbeatReceipt(TerminalHeartbeat):
+    received_at: datetime
+
+
+class SiteStatistics(Contract):
+    site_id: SiteId
+    recent_unique_badges: int
+    previous_unique_badges: int
+    change: int
+    excluded_untrusted_events: int
+    updated_at: datetime | None
+    data_status: Literal["fresh", "stale", "missing", "untrusted"]
+    heat: Literal["low", "medium", "high", "insufficient"]
+
+
+class TrendPoint(Contract):
+    site_id: SiteId
+    window_start: datetime
+    window_end: datetime
+    unique_badges: int
+
+
+class TransitionCount(Contract):
+    from_site: SiteId
+    to_site: SiteId
+    count: int
+
+
+class MapSnapshot(Contract):
+    session_id: Literal["demo-001"] = "demo-001"
+    source: Source
+    generated_at: datetime
+    window_seconds: Literal[300] = 300
+    stale_after_seconds: Literal[90] = 90
+    demo_thresholds: Literal[True] = True
+    metric_label: Literal["参与腰牌打卡数据；非实时在场人数"] = "参与腰牌打卡数据；非实时在场人数"
+    sites: list[SiteStatistics]
+    trend: list[TrendPoint]
+    transitions: list[TransitionCount]

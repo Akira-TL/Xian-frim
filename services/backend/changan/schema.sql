@@ -39,3 +39,11 @@ CREATE TABLE IF NOT EXISTS commands (
     expires_at TEXT NOT NULL,
     status TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS heartbeats (
+    terminal_id TEXT NOT NULL,
+    site_id TEXT NOT NULL,
+    config_version INTEGER NOT NULL,
+    captured_at TEXT NOT NULL,
+    received_at TEXT NOT NULL,
+    PRIMARY KEY (terminal_id, site_id)
+);

@@ -12,8 +12,10 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from .models import (
     BadgeRegistration, ErrorResponse, Health, ScanRequest, ScanResponse, SentReport,
     SiteSelection, Source, TerminalConfiguration, UnlockCommand, UnlockRequest, Visit,
+    HeartbeatReceipt, MapSnapshot, TerminalHeartbeat,
 )
 from .storage import BusinessError, Repository
+from .statistics import build_map
 
 
 def create_app(db_path: Path, operator_token: str, terminal_token: str,
@@ -33,6 +35,11 @@ def create_app(db_path: Path, operator_token: str, terminal_token: str,
         verify(operator_token, authorization)
 
     def terminal(authorization: Annotated[str | None, Header()] = None) -> None:
+        verify(terminal_token, authorization)
+
+    def reader(authorization: Annotated[str | None, Header()] = None) -> None:
+        if authorization is not None and authorization.isascii() and secrets.compare_digest(authorization, "Bearer " + operator_token):
+            return
         verify(terminal_token, authorization)
 
     @app.exception_handler(BusinessError)
@@ -67,6 +74,15 @@ def create_app(db_path: Path, operator_token: str, terminal_token: str,
     @app.put("/api/v1/terminal/configuration", dependencies=[Depends(operator)])
     def select_site(request: SiteSelection) -> TerminalConfiguration:
         return repository.select_site(request.site_id)
+
+    @app.post("/api/v1/terminal/heartbeat", dependencies=[Depends(terminal)])
+    def heartbeat(request: TerminalHeartbeat) -> HeartbeatReceipt:
+        return repository.heartbeat(request, clock())
+
+    @app.get("/api/v1/map", dependencies=[Depends(reader)])
+    def map_snapshot(source: Source = Source.PHYSICAL) -> MapSnapshot:
+        visits, heartbeats = repository.observations()
+        return build_map(visits, heartbeats, clock(), source)
 
     @app.post("/api/v1/unlock-commands", dependencies=[Depends(operator)])
     def unlock(request: UnlockRequest) -> UnlockCommand:

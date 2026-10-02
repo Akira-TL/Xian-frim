@@ -9,7 +9,7 @@ import sqlite3
 
 from .models import (
     BadgeRegistration, ScanRequest, ScanResponse, Source, TerminalConfiguration,
-    UnlockCommand, UnlockRequest, Visit,
+    UnlockCommand, UnlockRequest, Visit, HeartbeatReceipt, TerminalHeartbeat,
 )
 
 
@@ -118,6 +118,37 @@ class Repository:
         with self.connection() as db:
             row = db.execute("SELECT * FROM terminal_configs ORDER BY config_version DESC LIMIT 1").fetchone()
             return TerminalConfiguration(site_id=row["site_id"], config_version=row["config_version"])
+
+    def heartbeat(self, request: TerminalHeartbeat, now: datetime) -> HeartbeatReceipt:
+        captured = request.captured_at.astimezone(timezone.utc)
+        if captured > now + timedelta(seconds=30):
+            raise BusinessError(422, "心跳采集时间超出允许的时钟偏差")
+        with self.connection(write=True) as db:
+            config = db.execute(
+                "SELECT site_id FROM terminal_configs WHERE terminal_id=? AND config_version=?",
+                (request.terminal_id, request.config_version),
+            ).fetchone()
+            if not config or config["site_id"] != request.site_id:
+                raise BusinessError(409, "终端地点与配置版本不匹配")
+            previous = db.execute("SELECT captured_at FROM heartbeats WHERE terminal_id=? AND site_id=?",
+                                  (request.terminal_id, request.site_id)).fetchone()
+            if previous is None or datetime.fromisoformat(previous["captured_at"]) < captured:
+                db.execute("INSERT OR REPLACE INTO heartbeats VALUES (?, ?, ?, ?, ?)",
+                           (request.terminal_id, request.site_id, request.config_version,
+                            captured.isoformat(), now.isoformat()))
+        return HeartbeatReceipt(terminal_id=request.terminal_id, site_id=request.site_id,
+                                config_version=request.config_version, captured_at=captured, received_at=now)
+
+    def observations(self) -> tuple[list[Visit], list[HeartbeatReceipt]]:
+        # 同一读取事务，避免地图中的到访与终端反馈来自两个不同瞬间。
+        with self.connection() as db:
+            db.execute("BEGIN")
+            visits = [self.visit(row) for row in db.execute("SELECT * FROM visits")]
+            heartbeats = [HeartbeatReceipt(terminal_id=row["terminal_id"], site_id=row["site_id"],
+                                           config_version=row["config_version"], captured_at=row["captured_at"],
+                                           received_at=row["received_at"])
+                          for row in db.execute("SELECT * FROM heartbeats")]
+            return visits, heartbeats
 
     def select_site(self, site_id: str) -> TerminalConfiguration:
         with self.connection(write=True) as db:
