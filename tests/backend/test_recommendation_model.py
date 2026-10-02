@@ -6,6 +6,7 @@ from time import monotonic
 
 from fastapi.testclient import TestClient
 from pydantic import TypeAdapter
+import httpx
 import pytest
 
 from changan.api import create_app
@@ -192,6 +193,69 @@ def test_expired_output_has_private_rejection_evidence_without_a_suggestion(tmp_
         assert client.get("/api/v1/recommendation-rejections",
                           headers={"Authorization": "Bearer terminal-test"}).status_code == 401
     with TestClient(create_app(database, "operator-test", "terminal-test", clock)) as restarted:
+        persisted = restarted.get("/api/v1/recommendation-rejections", headers=operator())
+        assert TypeAdapter(list[RecommendationRejection]).validate_json(persisted.text) == records
+
+
+class CancelledLateModel:
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+        self.release_late = asyncio.Event()
+        self.finished = asyncio.Event()
+
+    async def recommend(self, snapshot: RecommendationInput) -> str:
+        self.started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            await self.release_late.wait()
+        try:
+            return await ValidModel().recommend(snapshot)
+        finally:
+            self.finished.set()
+
+
+def test_cancelled_request_preserves_rejection_without_accepting_late_output(tmp_path: Path) -> None:
+    database = tmp_path / "cancelled.sqlite3"
+    with TestClient(create_app(database, "operator-test", "terminal-test", lambda: NOW)) as setup:
+        register(setup)
+        post_scan(setup, scan())
+        refresh_site(setup, "B")
+        refresh_site(setup, "C")
+
+    async def exercise() -> list[RecommendationRejection]:
+        model = CancelledLateModel()
+        app = create_app(database, "operator-test", "terminal-test", lambda: NOW, recommendation_model=model)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as client:
+            request = asyncio.create_task(client.post("/api/v1/recommendations",
+                content='{"badge_id":"badge-001","event_id":"scan-001"}', headers=operator()))
+            await asyncio.wait_for(model.started.wait(), timeout=2)
+            request.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await request
+            response = await client.get("/api/v1/recommendation-rejections", headers=operator())
+            assert response.status_code == 200
+            records = TypeAdapter(list[RecommendationRejection]).validate_json(response.text)
+            assert len(records) == 1
+            record = records[0]
+            assert record.reason == "cancelled"
+            assert record.validation == "cancelled"
+            assert record.model_attempted is True
+            assert record.raw_output is None and record.raw_sha256 is None
+            assert record.raw_truncated is False
+            assert record.badge_id == "badge-001" and record.event_id == "scan-001"
+            assert record.input.selected_visit_site == "A"
+            model.release_late.set()
+            await asyncio.wait_for(model.finished.wait(), timeout=2)
+            after_late = await client.get("/api/v1/recommendation-rejections", headers=operator())
+            assert TypeAdapter(list[RecommendationRejection]).validate_json(after_late.text) == records
+            assert (await client.get("/api/v1/recommendations/" + record.input.snapshot_id,
+                                     headers=operator())).status_code == 404
+            assert (await client.get("/api/v1/unlock-commands", headers=operator())).text == "[]"
+            return records
+
+    records = asyncio.run(exercise())
+    with TestClient(create_app(database, "operator-test", "terminal-test", lambda: NOW)) as restarted:
         persisted = restarted.get("/api/v1/recommendation-rejections", headers=operator())
         assert TypeAdapter(list[RecommendationRejection]).validate_json(persisted.text) == records
 

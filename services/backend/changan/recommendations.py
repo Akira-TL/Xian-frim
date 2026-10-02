@@ -101,12 +101,12 @@ class RecommendationRejection(Contract):
     recorded_at: datetime
     badge_id: Identifier
     event_id: CommandId
-    reason: Literal["expired"]
+    reason: Literal["expired", "cancelled"]
     model_attempted: bool
     raw_output: Annotated[str, Field(max_length=4096)] | None
     raw_sha256: str | None
     raw_truncated: bool
-    validation: Literal["not_requested", "accepted", "invalid_output", "timeout", "unavailable"]
+    validation: Literal["not_requested", "accepted", "invalid_output", "timeout", "unavailable", "cancelled"]
     input: RecommendationInput
 
 
@@ -125,6 +125,14 @@ class RecommendationService:
             snapshot = RecommendationInput.model_validate_json(result.input.model_dump_json())
             try:
                 raw = await self._model_output(snapshot)
+            except asyncio.CancelledError:
+                # 只记录服务端已观察到的取消，不等待或采纳模型晚到返回。
+                rejection = RecommendationRejection(
+                    recorded_at=clock(), badge_id=request.badge_id, event_id=request.event_id,
+                    reason="cancelled", model_attempted=True, raw_output=None,
+                    raw_sha256=None, raw_truncated=False, validation="cancelled", input=result.input)
+                self.repository.save_recommendation_rejection(result.snapshot_id, rejection.model_dump_json())
+                raise
             except (OSError, ModelUnavailable):
                 # 网络异常详情可能含服务地址或凭据，不记日志，也不对外回显。
                 result = self._rule(result.input, "unavailable")
