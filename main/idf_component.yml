@@ -10,6 +10,9 @@ dependencies:
   78/esp-opus-encoder:
     version: "2.4.0"
     override_path: "../components/78__esp-opus-encoder"
+  # The v2.0.x firmware uses this component's shared NetworkInterface,
+  # EspNetwork, HTTP, WebSocket, MQTT, and UDP abstractions on Wi-Fi boards.
+  78/esp-ml307: "~3.3.5"
   78/xiaozhi-fonts: "1.5.5"
 
   espressif/esp_lcd_panel_io_additions: "1.0.1"
