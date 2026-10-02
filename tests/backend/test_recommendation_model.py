@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from changan.api import create_app
-from changan.recommendations import ModelUnavailable, RecommendationInput, RecommendationResult
+from changan.recommendations import ModelUnavailable, RecommendationAudit, RecommendationInput, RecommendationResult
 from test_recommendations import refresh_site
 from test_visits import NOW, operator, post_scan, register, scan
 
@@ -84,6 +84,8 @@ class InvalidModel:
         self.fault = fault
 
     async def recommend(self, snapshot: RecommendationInput) -> str:
+        if self.fault == "oversize":
+            return "x" * 4097
         if self.fault == "non_json":
             return "请去候选之外的其他景区"
         snapshot_id = "another-snapshot" if self.fault == "snapshot" else snapshot.snapshot_id
@@ -94,7 +96,7 @@ class InvalidModel:
                 + '","child_text":"' + text + '","operator_reason":"测试外部错误输出"' + extra + '}')
 
 
-@pytest.mark.parametrize("fault", ["non_json", "snapshot", "candidate", "blank", "long", "extra"])
+@pytest.mark.parametrize("fault", ["non_json", "snapshot", "candidate", "blank", "long", "extra", "oversize"])
 def test_invalid_model_output_cannot_replace_valid_rule_or_unlock(tmp_path: Path, fault: str) -> None:
     with TestClient(create_app(tmp_path / "invalid.sqlite3", "operator-test", "terminal-test",
                               lambda: NOW, recommendation_model=InvalidModel(fault))) as client:
@@ -111,6 +113,13 @@ def test_invalid_model_output_cannot_replace_valid_rule_or_unlock(tmp_path: Path
         assert result.selected_site == "B"
         assert "校验失败" in result.operator_reason
         assert client.get("/api/v1/unlock-commands", headers=operator()).text == "[]"
+        audit_response = client.get("/api/v1/recommendations/" + result.snapshot_id + "/audit", headers=operator())
+        audit = RecommendationAudit.model_validate_json(audit_response.text)
+        assert audit.validation == "invalid_output"
+        assert audit.result == result
+        assert audit.raw_output is not None
+        assert audit.raw_truncated == (fault == "oversize")
+        assert len(audit.raw_output) <= 4096
 
 
 @dataclass
@@ -178,4 +187,38 @@ def test_unreachable_model_returns_explicit_rule_without_exception_detail(tmp_pa
         assert '"fallback_reason":"unavailable"' in history.text
         assert "TEST_PRIVATE_MARKER" not in history.text
         assert "TEST_PRIVATE_MARKER" not in caplog.text
+        private = client.get("/api/v1/recommendations/" + result.snapshot_id + "/audit", headers=operator())
+        assert private.status_code == 200
+        assert "TEST_PRIVATE_MARKER" not in private.text
         assert client.get("/api/v1/unlock-commands", headers=operator()).text == "[]"
+
+
+def test_original_model_output_is_private_and_persists_across_restart(tmp_path: Path) -> None:
+    database = tmp_path / "audit.sqlite3"
+    with TestClient(create_app(database, "operator-test", "terminal-test", lambda: NOW,
+                              recommendation_model=ValidModel())) as client:
+        register(client)
+        post_scan(client, scan())
+        refresh_site(client, "B")
+        refresh_site(client, "C")
+        response = client.post("/api/v1/recommendations",
+                               content='{"badge_id":"badge-001","event_id":"scan-001"}', headers=operator())
+        result = RecommendationResult.model_validate_json(response.text)
+        path = "/api/v1/recommendations/" + result.snapshot_id + "/audit"
+        audit = client.get(path, headers=operator())
+        assert audit.status_code == 200
+        saved = RecommendationAudit.model_validate_json(audit.text)
+        assert saved.result == result
+        assert saved.raw_output is not None
+        assert saved.raw_sha256 is not None and len(saved.raw_sha256) == 64
+        assert saved.raw_output == ('{"snapshot_id":"' + result.snapshot_id
+                                    + '","selected_site":"C","child_text":"下一站去诗意庭院看看吧。",'
+                                    '"operator_reason":"诗意庭院在本次候选中，可查看庭院文字内容。"}')
+        assert '"model_attempted":true' in audit.text
+        assert '"validation":"accepted"' in audit.text
+        assert "下一站去诗意庭院看看吧。" in audit.text
+        assert "raw_output" not in response.text
+        assert client.get(path).status_code == 401
+        assert client.get(path, headers={"Authorization": "Bearer terminal-test"}).status_code == 401
+    with TestClient(create_app(database, "operator-test", "terminal-test", lambda: NOW)) as restarted:
+        assert restarted.get(path, headers=operator()).text == audit.text

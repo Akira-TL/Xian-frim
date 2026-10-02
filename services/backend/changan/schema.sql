@@ -67,3 +67,7 @@ CREATE TABLE IF NOT EXISTS recommendations (
     event_id TEXT NOT NULL REFERENCES visits(event_id),
     result_json TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS recommendation_audits (
+    snapshot_id TEXT PRIMARY KEY REFERENCES recommendations(snapshot_id),
+    audit_json TEXT NOT NULL
+);

@@ -1,6 +1,7 @@
 """基于已记录到访的推荐约束；规则建议不冒充模型输出。"""
 
 import asyncio
+from hashlib import sha256
 from datetime import datetime, timedelta
 from time import monotonic
 from typing import Annotated, Callable, Literal, Protocol
@@ -86,6 +87,16 @@ class RecommendationRecord(Contract):
     result: RecommendationResult
 
 
+class RecommendationAudit(Contract):
+    recorded_at: datetime
+    model_attempted: bool
+    raw_output: Annotated[str, Field(max_length=4096)] | None
+    raw_sha256: str | None
+    raw_truncated: bool
+    validation: Literal["not_requested", "accepted", "invalid_output", "timeout", "unavailable"]
+    result: RecommendationResult
+
+
 class RecommendationService:
     def __init__(self, repository: Repository, catalog: SiteCatalog,
                  model: RecommendationModel | None = None) -> None:
@@ -95,7 +106,9 @@ class RecommendationService:
 
     async def create(self, request: RecommendationRequest, clock: Callable[[], datetime]) -> RecommendationResult:
         result = self._generate(request, clock())
-        if self.model is not None and result.input.candidates:
+        attempted = self.model is not None and bool(result.input.candidates)
+        raw: str | None = None
+        if attempted:
             snapshot = RecommendationInput.model_validate_json(result.input.model_dump_json())
             try:
                 raw = await self._model_output(snapshot)
@@ -112,9 +125,23 @@ class RecommendationService:
                     result = self._rule(result.input, "invalid_output")
         if result.input.expires_at <= clock():
             raise BusinessError(409, "推荐输入快照已过期，请重新生成，不使用晚到结果")
+        validation: Literal["not_requested", "accepted", "invalid_output", "timeout", "unavailable"] = "not_requested"
+        if attempted:
+            if result.source == "model":
+                validation = "accepted"
+            elif result.fallback_reason in ("invalid_output", "timeout", "unavailable"):
+                validation = result.fallback_reason
+        audit = RecommendationAudit(recorded_at=clock(), model_attempted=attempted,
+                                    raw_output=None if raw is None else raw[:4096],
+                                    raw_sha256=None if raw is None else sha256(raw.encode("utf-8")).hexdigest(),
+                                    raw_truncated=raw is not None and len(raw) > 4096,
+                                    validation=validation, result=result)
         self.repository.save_recommendation(result.snapshot_id, request.badge_id, request.event_id,
-                                             result.model_dump_json())
+                                             result.model_dump_json(), audit.model_dump_json())
         return result
+
+    def audit(self, snapshot_id: str) -> RecommendationAudit:
+        return RecommendationAudit.model_validate_json(self.repository.recommendation_audit_json(snapshot_id))
 
     async def _model_output(self, snapshot: RecommendationInput) -> str | None:
         assert self.model is not None

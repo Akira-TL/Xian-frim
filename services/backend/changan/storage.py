@@ -181,10 +181,21 @@ class Repository:
                 verified_at=None if progress is None else datetime.fromisoformat(progress["verified_at"]),
             )
 
-    def save_recommendation(self, snapshot_id: str, badge_id: str, event_id: str, result_json: str) -> None:
+    def save_recommendation(self, snapshot_id: str, badge_id: str, event_id: str, result_json: str,
+                            audit_json: str | None = None) -> None:
         with self.connection(write=True) as db:
             db.execute("INSERT INTO recommendations VALUES (?, ?, ?, ?)",
                        (snapshot_id, badge_id, event_id, result_json))
+            if audit_json is not None:
+                db.execute("INSERT INTO recommendation_audits VALUES (?, ?)", (snapshot_id, audit_json))
+
+    def recommendation_audit_json(self, snapshot_id: str) -> str:
+        with self.connection() as db:
+            row = db.execute("SELECT audit_json FROM recommendation_audits WHERE snapshot_id=?",
+                             (snapshot_id,)).fetchone()
+            if row is None:
+                raise BusinessError(404, "该推荐没有审计记录，不补造历史证据")
+            return row["audit_json"]
 
     def recommendation_json(self, snapshot_id: str) -> str:
         with self.connection() as db:

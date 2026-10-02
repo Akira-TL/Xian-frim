@@ -22,7 +22,7 @@ from .device_protocol import DeviceEnvelope, DeviceKey, DeviceKeys, DeviceReport
 from .device_service import DeviceService
 from .simulation import ScenarioRequest, ScenarioResult, simulate
 from .catalog import SiteCatalog, default_catalog
-from .recommendations import RecommendationModel, RecommendationRecord, RecommendationRequest, RecommendationResult, RecommendationService
+from .recommendations import RecommendationAudit, RecommendationModel, RecommendationRecord, RecommendationRequest, RecommendationResult, RecommendationService
 
 
 def create_app(db_path: Path, operator_token: str, terminal_token: str,
@@ -82,6 +82,10 @@ def create_app(db_path: Path, operator_token: str, terminal_token: str,
     @app.get("/api/v1/recommendations/{snapshot_id}", dependencies=[Depends(reader)])
     def recommendation_record(snapshot_id: str) -> RecommendationRecord:
         return recommendations.read(snapshot_id, clock())
+
+    @app.get("/api/v1/recommendations/{snapshot_id}/audit", dependencies=[Depends(operator)])
+    def recommendation_audit(snapshot_id: str) -> RecommendationAudit:
+        return recommendations.audit(snapshot_id)
 
     @app.post("/api/v1/badges", dependencies=[Depends(operator)])
     def register(request: BadgeRegistration) -> BadgeRegistration:
