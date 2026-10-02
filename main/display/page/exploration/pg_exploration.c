@@ -258,11 +258,22 @@ static void configure(page_base_t *self)
     page_set_custom_load_anim_type(self, LOAD_ANIM_NONE, 0, lv_anim_path_ease_out);
 }
 
+// 现有页面管理器无条件调用全部生命周期回调，未使用的阶段也必须提供实现。
+static void ignore_lifecycle(page_base_t *self)
+{
+    (void)self;
+}
+
 page_vtable_t *exploration_create(const char *name)
 {
     (void)name;
     static page_vtable_t table = {
         .on_custom_attr_config = configure, .on_view_load = load,
+        .on_view_did_load = ignore_lifecycle,
+        .on_view_will_appear = ignore_lifecycle,
+        .on_view_did_appear = ignore_lifecycle,
+        .on_view_will_disappear = ignore_lifecycle,
+        .on_view_did_disappear = ignore_lifecycle,
         .on_view_did_unload = unload};
     return &table;
 }
