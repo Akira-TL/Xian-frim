@@ -1,4 +1,8 @@
+import asyncio
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
+from time import monotonic
 
 from fastapi.testclient import TestClient
 import pytest
@@ -37,6 +41,44 @@ def test_valid_model_output_uses_its_candidate_not_rule_choice(tmp_path: Path) -
         assert '"delivery":"historical"' in history.text
 
 
+class SlowModel:
+    def __init__(self, late: bool = False) -> None:
+        self.late = late
+
+    async def recommend(self, snapshot: RecommendationInput) -> str:
+        try:
+            await asyncio.sleep(20)
+        except asyncio.CancelledError:
+            if not self.late:
+                raise
+            await asyncio.sleep(0.2)
+        return await ValidModel().recommend(snapshot)
+
+
+@pytest.mark.parametrize("late", [False, True])
+def test_model_has_eight_second_deadline_and_cannot_confirm_late_result(tmp_path: Path, late: bool) -> None:
+    with TestClient(create_app(tmp_path / "timeout.sqlite3", "operator-test", "terminal-test",
+                              lambda: NOW, recommendation_model=SlowModel(late))) as client:
+        register(client)
+        post_scan(client, scan())
+        refresh_site(client, "B")
+        refresh_site(client, "C")
+        started = monotonic()
+        response = client.post("/api/v1/recommendations",
+                               content='{"badge_id":"badge-001","event_id":"scan-001"}', headers=operator())
+        elapsed = monotonic() - started
+        assert response.status_code == 200
+        result = RecommendationResult.model_validate_json(response.text)
+        assert result.source == "rule_fallback"
+        assert result.fallback_reason == "timeout"
+        assert result.selected_site == "B"
+        assert 7.5 <= elapsed < 10
+        assert "八秒" in result.operator_reason
+        history = client.get("/api/v1/recommendations/" + result.snapshot_id, headers=operator())
+        assert history.status_code == 200
+        assert '"delivery":"historical"' in history.text
+
+
 class InvalidModel:
     def __init__(self, fault: str) -> None:
         self.fault = fault
@@ -69,3 +111,35 @@ def test_invalid_model_output_cannot_replace_valid_rule_or_unlock(tmp_path: Path
         assert result.selected_site == "B"
         assert "校验失败" in result.operator_reason
         assert client.get("/api/v1/unlock-commands", headers=operator()).text == "[]"
+
+
+@dataclass
+class TestClock:
+    __test__ = False
+    now: datetime = NOW
+
+    def __call__(self) -> datetime:
+        return self.now
+
+
+class ExpiredModel:
+    def __init__(self, clock: TestClock) -> None:
+        self.clock = clock
+
+    async def recommend(self, snapshot: RecommendationInput) -> str:
+        self.clock.now += timedelta(seconds=31)
+        return await ValidModel().recommend(snapshot)
+
+
+def test_model_output_after_snapshot_expiry_is_not_a_current_suggestion(tmp_path: Path) -> None:
+    clock = TestClock()
+    with TestClient(create_app(tmp_path / "expired.sqlite3", "operator-test", "terminal-test",
+                              clock, recommendation_model=ExpiredModel(clock))) as client:
+        register(client)
+        post_scan(client, scan())
+        refresh_site(client, "B")
+        refresh_site(client, "C")
+        response = client.post("/api/v1/recommendations",
+                               content='{"badge_id":"badge-001","event_id":"scan-001"}', headers=operator())
+        assert response.status_code == 409
+        assert "快照已过期" in response.text

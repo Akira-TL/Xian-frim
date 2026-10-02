@@ -26,7 +26,8 @@ export default function RecommendationPanel({ visit, disabled = false }: { visit
   const candidate = result?.input.candidates.find(item => item.site.site_id === result.selected_site);
   const originLabel = result?.source === "model" ? "模型建议（输出校验通过）"
     : result?.source === "rule_fallback" ? result.fallback_reason === "invalid_output"
-      ? "规则建议（模型输出校验失败）" : "规则建议（AI 未配置）" : "无有效候选";
+      ? "规则建议（模型输出校验失败）" : result.fallback_reason === "timeout"
+        ? "规则建议（模型八秒内未返回）" : "规则建议（AI 未配置）" : "无有效候选";
   const mayChoose = !!candidate && !view?.historical && !expired && !busy && !disabled;
 
   async function request(historical: boolean) {

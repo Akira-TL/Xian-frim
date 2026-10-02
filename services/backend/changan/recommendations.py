@@ -1,6 +1,8 @@
 """基于已记录到访的推荐约束；规则建议不冒充模型输出。"""
 
+import asyncio
 from datetime import datetime, timedelta
+from time import monotonic
 from typing import Annotated, Callable, Literal, Protocol
 from uuid import uuid4
 
@@ -40,7 +42,7 @@ class RecommendationInput(Contract):
 class RecommendationResult(Contract):
     snapshot_id: Identifier
     source: Literal["model", "rule_fallback", "none"]
-    fallback_reason: Literal["not_configured", "no_candidates", "invalid_output"] | None
+    fallback_reason: Literal["not_configured", "no_candidates", "invalid_output", "timeout"] | None
     selected_site: SiteId | None
     child_text: Annotated[str, Field(max_length=200)]
     operator_reason: Annotated[str, Field(max_length=500)]
@@ -83,23 +85,52 @@ class RecommendationService:
         result = self._generate(request, clock())
         if self.model is not None and result.input.candidates:
             snapshot = RecommendationInput.model_validate_json(result.input.model_dump_json())
-            raw = await self.model.recommend(snapshot)
+            raw = await self._model_output(snapshot)
             try:
-                if len(raw) > 4096:
-                    raise ValueError("模型结果超长")
-                output = ModelOutput.model_validate_json(raw)
-                if (output.snapshot_id != result.snapshot_id or not any(
-                        candidate.site.site_id == output.selected_site for candidate in result.input.candidates)):
-                    raise ValueError("模型快照或候选不匹配")
+                if raw is None:
+                    result = self._rule(result.input, "timeout")
+                else:
+                    result = self._validated_result(raw, result)
             except (ValidationError, ValueError):
                 result = self._rule(result.input, "invalid_output")
-            else:
-                result = RecommendationResult(snapshot_id=result.snapshot_id, source="model", fallback_reason=None,
-                                              selected_site=output.selected_site, child_text=output.child_text,
-                                              operator_reason=output.operator_reason, input=result.input)
+        if result.input.expires_at <= clock():
+            raise BusinessError(409, "推荐输入快照已过期，请重新生成，不使用晚到结果")
         self.repository.save_recommendation(result.snapshot_id, request.badge_id, request.event_id,
                                              result.model_dump_json())
         return result
+
+    async def _model_output(self, snapshot: RecommendationInput) -> str | None:
+        assert self.model is not None
+        task = asyncio.create_task(self.model.recommend(snapshot))
+        # 超时或调用方取消后，晚到异常只被消费，不记入日志或恢复成成功。
+        task.add_done_callback(self._consume_model_completion)
+        started = monotonic()
+        try:
+            done, _ = await asyncio.wait({task}, timeout=8)
+        except asyncio.CancelledError:
+            task.cancel()
+            raise
+        if not done or monotonic() - started >= 8:
+            task.cancel()
+            return None
+        return task.result()
+
+    @staticmethod
+    def _consume_model_completion(task: asyncio.Task[str]) -> None:
+        if not task.cancelled():
+            task.exception()
+
+    @staticmethod
+    def _validated_result(raw: str, result: RecommendationResult) -> RecommendationResult:
+        if len(raw) > 4096:
+            raise ValueError("模型结果超长")
+        output = ModelOutput.model_validate_json(raw)
+        if (output.snapshot_id != result.snapshot_id or not any(
+                candidate.site.site_id == output.selected_site for candidate in result.input.candidates)):
+            raise ValueError("模型快照或候选不匹配")
+        return RecommendationResult(snapshot_id=result.snapshot_id, source="model", fallback_reason=None,
+                                    selected_site=output.selected_site, child_text=output.child_text,
+                                    operator_reason=output.operator_reason, input=result.input)
 
     def read(self, snapshot_id: str, now: datetime) -> RecommendationRecord:
         result = RecommendationResult.model_validate_json(self.repository.recommendation_json(snapshot_id))
@@ -148,11 +179,11 @@ class RecommendationService:
         return self._rule(snapshot, "not_configured")
 
     @staticmethod
-    def _rule(snapshot: RecommendationInput, reason: Literal["not_configured", "invalid_output"]) -> RecommendationResult:
+    def _rule(snapshot: RecommendationInput, reason: Literal["not_configured", "invalid_output", "timeout"]) -> RecommendationResult:
         if snapshot.candidates:
             selected = min(snapshot.candidates, key=lambda candidate: (candidate.visited,
                             candidate.statistics.recent_unique_badges, candidate.site.site_id))
-            prefix = "AI 未配置" if reason == "not_configured" else "AI 输出校验失败"
+            prefix = "AI 未配置" if reason == "not_configured" else "AI 八秒内未返回" if reason == "timeout" else "AI 输出校验失败"
             explanation = (f"{prefix}；这是演示规则建议，优先尚未到访、近期打卡较少的有效候选。"
                            f"{selected.site.name} 最近五分钟 {selected.statistics.recent_unique_badges} 枚腰牌。")
             if not selected.site.game_available:
