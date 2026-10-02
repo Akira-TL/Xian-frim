@@ -6,7 +6,7 @@ import { api } from "../../lib/api";
 import { sourceSchema, type ActivitySnapshot, type DataSource } from "../../lib/contracts";
 import ScenarioPanel from "./scenario-panel";
 
-const siteNames = { A: "秦俑工坊", B: "丝路驿站", C: "碑林书院" };
+const siteNames = { A: "秦俑工坊", B: "长安城门", C: "诗意庭院" };
 const statusNames = { fresh: "数据新鲜", stale: "数据已过时", missing: "尚无数据", untrusted: "时间不可靠" };
 const heatNames = { low: "低", medium: "中", high: "高", insufficient: "数据不足" };
 const heatStyles = {

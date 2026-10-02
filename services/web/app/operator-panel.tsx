@@ -6,7 +6,7 @@ import { badgeSchema, type Badge, type Command, type DeviceState, type Visit } f
 import { BadgeControl, type ControlPhase } from "../lib/badge-control";
 import { bluetoothSupport, connectBadge } from "../lib/web-bluetooth";
 
-const siteNames = { A: "秦俑工坊", B: "丝路驿站", C: "碑林书院" };
+const siteNames = { A: "秦俑工坊", B: "长安城门", C: "诗意庭院" };
 const commandNames = { pending: "待发送", sent: "已发送，执行未确认", confirmed: "设备已确认执行", unknown: "结果未确认", failed: "请求失败" };
 const buttonStyle = "rounded-xl bg-stone-800 px-4 py-3 text-white disabled:opacity-40";
 const phaseNames: Record<ControlPhase, string> = {
