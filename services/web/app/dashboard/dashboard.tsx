@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 import { sourceSchema, type ActivitySnapshot, type DataSource } from "../../lib/contracts";
+import ScenarioPanel from "./scenario-panel";
 
 const siteNames = { A: "秦俑工坊", B: "丝路驿站", C: "碑林书院" };
 const statusNames = { fresh: "数据新鲜", stale: "数据已过时", missing: "尚无数据", untrusted: "时间不可靠" };
@@ -125,6 +126,7 @@ export default function Dashboard() {
         </div>
       </div>
     </>}
-    <footer className={panel}>AI 下一站推荐与情景推演尚未交付；当前页面不展示未经验证的推荐或预测结果。</footer>
+    <ScenarioPanel />
+    <footer className={panel}>AI 下一站推荐尚未交付；情景推演与到访观测、游戏进度完全独立。</footer>
   </main>;
 }
