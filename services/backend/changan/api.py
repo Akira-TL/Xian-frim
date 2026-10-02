@@ -12,7 +12,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from .models import (
     BadgeRegistration, ErrorResponse, Health, ScanRequest, ScanResponse, SentReport,
     SiteSelection, Source, TerminalConfiguration, UnlockCommand, UnlockRequest, Visit,
-    HeartbeatReceipt, MapSnapshot, TerminalHeartbeat,
+    HeartbeatReceipt, MapSnapshot, TerminalHeartbeat, ActivitySnapshot,
 )
 from .storage import BusinessError, Repository
 from .statistics import build_map
@@ -91,6 +91,12 @@ def create_app(db_path: Path, operator_token: str, terminal_token: str,
     def map_snapshot(source: Source = Source.PHYSICAL) -> MapSnapshot:
         visits, heartbeats = repository.observations()
         return build_map(visits, heartbeats, clock(), source)
+
+    @app.get("/api/v1/activity", dependencies=[Depends(operator)])
+    def activity_snapshot(source: Source = Source.PHYSICAL) -> ActivitySnapshot:
+        visits, heartbeats, progress = repository.activity_observations()
+        return ActivitySnapshot(map=build_map(visits, heartbeats, clock(), source),
+                                progress=progress if source == Source.PHYSICAL else None)
 
     @app.post("/api/v1/unlock-commands", dependencies=[Depends(operator)])
     def unlock(request: UnlockRequest) -> UnlockCommand:

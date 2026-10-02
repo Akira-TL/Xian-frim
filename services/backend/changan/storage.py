@@ -9,7 +9,7 @@ import sqlite3
 
 from .models import (
     BadgeRegistration, ScanRequest, ScanResponse, Source, TerminalConfiguration,
-    UnlockCommand, UnlockRequest, Visit, HeartbeatReceipt, TerminalHeartbeat,
+    UnlockCommand, UnlockRequest, Visit, HeartbeatReceipt, TerminalHeartbeat, DeviceProgressSummary,
 )
 
 
@@ -155,6 +155,37 @@ class Repository:
                                            received_at=row["received_at"])
                           for row in db.execute("SELECT * FROM heartbeats")]
             return visits, heartbeats
+
+    def activity_observations(self) -> tuple[list[Visit], list[HeartbeatReceipt], DeviceProgressSummary]:
+        # 地图与设备进度必须来自同一读取事务。
+        with self.connection() as db:
+            db.execute("BEGIN")
+            visits = [self.visit(row) for row in db.execute("SELECT * FROM visits")]
+            heartbeats = [HeartbeatReceipt(terminal_id=row["terminal_id"], site_id=row["site_id"],
+                                           config_version=row["config_version"], captured_at=row["captured_at"],
+                                           received_at=row["received_at"])
+                          for row in db.execute("SELECT * FROM heartbeats")]
+            row = db.execute("""
+                WITH eligible AS (
+                    SELECT DISTINCT badge_id FROM visits
+                    WHERE session_id = 'demo-001' AND source = ? AND site_id = 'A'
+                )
+                SELECT COUNT(*) AS eligible_badges,
+                       COUNT(p.badge_id) AS verified_badges,
+                       COALESCE(SUM((p.flags & 1) != 0), 0) AS unlocked_badges,
+                       COALESCE(SUM((p.flags & 2) != 0), 0) AS completed_badges,
+                       COALESCE(SUM((p.flags & 4) != 0), 0) AS collected_badges,
+                       COALESCE(SUM((p.flags & 8) != 0), 0) AS exhibiting_badges,
+                       MAX(p.verified_at) AS last_verified_at
+                FROM eligible e LEFT JOIN verified_progress p ON p.badge_id = e.badge_id
+            """, (Source.PHYSICAL,)).fetchone()
+            progress = DeviceProgressSummary(
+                eligible_badges=row["eligible_badges"], verified_badges=row["verified_badges"],
+                unlocked_badges=row["unlocked_badges"], completed_badges=row["completed_badges"],
+                collected_badges=row["collected_badges"], exhibiting_badges=row["exhibiting_badges"],
+                last_verified_at=row["last_verified_at"],
+            )
+            return visits, heartbeats, progress
 
     def select_site(self, site_id: str) -> TerminalConfiguration:
         with self.connection(write=True) as db:

@@ -144,3 +144,19 @@ class MapSnapshot(Contract):
     sites: list[SiteStatistics]
     trend: list[TrendPoint]
     transitions: list[TransitionCount]
+
+
+class DeviceProgressSummary(Contract):
+    game_id: Literal["qin_formation"] = "qin_formation"
+    eligible_badges: Annotated[int, Field(ge=0)] = 0
+    verified_badges: Annotated[int, Field(ge=0)] = 0
+    unlocked_badges: Annotated[int, Field(ge=0)] = 0
+    completed_badges: Annotated[int, Field(ge=0)] = 0
+    collected_badges: Annotated[int, Field(ge=0)] = 0
+    exhibiting_badges: Annotated[int, Field(ge=0)] = 0
+    last_verified_at: datetime | None = None
+
+
+class ActivitySnapshot(Contract):
+    map: MapSnapshot
+    progress: DeviceProgressSummary | None
