@@ -3,7 +3,7 @@
 #include "services/exploration/exploration.h"
 #include <stdint.h>
 
-LV_FONT_DECLARE(font_puhui_20_4)
+LV_FONT_DECLARE(font_puhui_18_4)
 
 typedef enum { VIEW_HOME, VIEW_GAME, VIEW_COLLECTION, VIEW_EXHIBIT } view_t;
 static struct {
@@ -19,9 +19,20 @@ static struct {
 
 static void render(void);
 
+static void readable_text(lv_obj_t *object)
+{
+    // 使用完整中文字体并统一放大至约 27 像素，避免备用字形退到 14 像素。
+    lv_obj_set_style_text_font(object, &font_puhui_18_4, 0);
+    lv_obj_set_style_transform_pivot_x(object, LV_PCT(50), 0);
+    lv_obj_set_style_transform_pivot_y(object, LV_PCT(50), 0);
+    lv_obj_set_style_transform_scale_x(object, 384, 0);
+    lv_obj_set_style_transform_scale_y(object, 384, 0);
+}
+
 static lv_obj_t *label(const char *text, int y)
 {
     lv_obj_t *obj = lv_label_create(pg.root);
+    readable_text(obj);
     lv_obj_set_width(obj, 260);
     lv_obj_set_style_text_align(obj, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(obj, LV_ALIGN_TOP_MID, 0, y);
@@ -40,6 +51,7 @@ static lv_obj_t *button(const char *text, int x, int y, int width,
     lv_obj_add_event_cb(obj, callback, LV_EVENT_CLICKED, (void *)value);
     if (text) {
         lv_obj_t *caption = lv_label_create(obj);
+        readable_text(caption);
         lv_label_set_text(caption, text);
         lv_obj_center(caption);
     }
@@ -238,7 +250,7 @@ static void load(page_base_t *self)
     lv_obj_set_style_bg_color(pg.root, lv_color_hex(0x211c18), 0);
     lv_obj_set_style_bg_opa(pg.root, LV_OPA_COVER, 0);
     lv_obj_set_style_text_color(pg.root, lv_color_hex(0xffecd6), 0);
-    lv_obj_set_style_text_font(pg.root, &font_puhui_20_4, 0);
+    lv_obj_set_style_text_font(pg.root, &font_puhui_18_4, 0);
     lv_obj_clear_flag(pg.root, LV_OBJ_FLAG_SCROLLABLE);
     render();
     pg.timer = lv_timer_create(poll, 300, NULL);
