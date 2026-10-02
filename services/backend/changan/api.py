@@ -126,12 +126,12 @@ def create_app(db_path: Path, operator_token: str, terminal_token: str,
     @app.get("/api/v1/map", dependencies=[Depends(reader)])
     def map_snapshot(source: Source = Source.PHYSICAL) -> MapSnapshot:
         visits, heartbeats = repository.observations()
-        return build_map(visits, heartbeats, clock(), source)
+        return build_map(visits, heartbeats, clock(), source, catalog.heat_thresholds)
 
     @app.get("/api/v1/activity", dependencies=[Depends(operator)])
     def activity_snapshot(source: Source = Source.PHYSICAL) -> ActivitySnapshot:
         visits, heartbeats, progress = repository.activity_observations()
-        return ActivitySnapshot(map=build_map(visits, heartbeats, clock(), source),
+        return ActivitySnapshot(map=build_map(visits, heartbeats, clock(), source, catalog.heat_thresholds),
                                 progress=progress if source == Source.PHYSICAL else None)
 
     @app.post("/api/v1/simulation", dependencies=[Depends(operator)])

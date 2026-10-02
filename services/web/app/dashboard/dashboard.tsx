@@ -82,7 +82,7 @@ export default function Dashboard() {
     {!map ? <p className={panel}>暂无所选来源的快照；不会填充虚构数值。</p> : <>
       <section className={panel}>
         <h2 className="text-xl font-semibold">节点示意与近期热度</h2>
-        <p className="mt-1 text-sm text-stone-600">最近五分钟的不同腰牌数；节点示意不代表真实地理坐标。演示阈值：低 0—2、中 3—5、高 6 及以上；超过九十秒未更新或时间不可靠显示数据不足。</p>
+        <p className="mt-1 text-sm text-stone-600">最近五分钟的不同腰牌数；节点示意不代表真实地理坐标。演示阈值：低 0—{map.heat_thresholds.medium_min - 1}、中 {map.heat_thresholds.medium_min}—{map.heat_thresholds.high_min - 1}、高 {map.heat_thresholds.high_min} 及以上；不代表场地安全容量。超过九十秒未更新或时间不可靠显示数据不足。</p>
         <div className="mt-4 grid gap-4 md:grid-cols-3">{map.sites.map(site => <article key={site.site_id}
           className={`rounded-xl border-2 p-4 ${heatStyles[site.heat]}`}>
           <h3 className="text-lg font-semibold">{site.site_id} · {siteNames[site.site_id]}</h3>

@@ -10,7 +10,7 @@ from uuid import uuid4
 from pydantic import Field, ValidationError, field_validator
 
 from .catalog import SiteCatalog, SiteDefinition
-from .models import Contract, CommandId, Identifier, SiteId, SiteStatistics, Source
+from .models import Contract, CommandId, HeatThresholds, Identifier, SiteId, SiteStatistics, Source
 from .storage import BusinessError, Repository
 from .statistics import build_map
 
@@ -41,6 +41,7 @@ class RecommendationInput(Contract):
     generated_at: datetime
     expires_at: datetime
     catalog_version: int
+    heat_thresholds: HeatThresholds = Field(default_factory=HeatThresholds)
     selected_visit_site: SiteId
     visited_sites: list[SiteId]
     completed_games: list[Literal["qin_formation"]]
@@ -231,7 +232,7 @@ class RecommendationService:
         verified_at = records.verified_at if event.source == Source.PHYSICAL else None
         visited = sorted({visit.site_id for visit in own})
         current_site = next(site for site in self.catalog.sites if site.site_id == event.site_id)
-        statistics = build_map(visits, heartbeats, now, event.source)
+        statistics = build_map(visits, heartbeats, now, event.source, self.catalog.heat_thresholds)
         candidates: list[RecommendationCandidate] = []
         for site in sorted(self.catalog.sites, key=lambda site: site.site_id):
             observed = next(item for item in statistics.sites if item.site_id == site.site_id)
@@ -247,7 +248,7 @@ class RecommendationService:
         ])
         snapshot = RecommendationInput(
             snapshot_id=uuid4().hex, data_source=event.source, generated_at=now,
-            expires_at=expires_at, catalog_version=self.catalog.version,
+            expires_at=expires_at, catalog_version=self.catalog.version, heat_thresholds=self.catalog.heat_thresholds,
             selected_visit_site=event.site_id, visited_sites=visited,
             completed_games=completed, progress_verified_at=verified_at, candidates=candidates,
         )

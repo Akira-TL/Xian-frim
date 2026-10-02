@@ -1,8 +1,13 @@
 from datetime import timedelta
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from changan.models import MapSnapshot, SiteSelection, TerminalConfiguration, TerminalHeartbeat
+from changan.models import ActivitySnapshot, MapSnapshot, SiteSelection, TerminalConfiguration, TerminalHeartbeat
+from changan.api import create_app
+from changan.catalog import SiteCatalog, default_catalog
+from changan.recommendations import RecommendationRecord, RecommendationResult
+from test_recommendations import refresh_site
 from test_visits import client, operator, post_scan, register, scan, terminal, NOW
 
 
@@ -90,3 +95,42 @@ def test_map_is_readable_by_staff_but_not_anonymous_clients(client: TestClient) 
     assert client.get("/api/v1/map", headers=operator()).status_code == 200
     assert client.get("/api/v1/map").status_code == 401
     assert client.get("/api/v1/map?source=other", headers=terminal()).status_code == 422
+
+
+def test_configured_thresholds_change_heat_without_changing_facts(tmp_path: Path) -> None:
+    configuration = default_catalog().model_dump_json().replace('"version":1', '"version":2')
+    configuration = configuration.replace('"heat_thresholds":{"medium_min":3,"high_min":6}',
+                                          '"heat_thresholds":{"medium_min":1,"high_min":2}')
+    catalog = SiteCatalog.model_validate_json(configuration)
+    with TestClient(create_app(tmp_path / "thresholds.sqlite3", "operator-test", "terminal-test",
+                              lambda: NOW, site_catalog=catalog)) as client:
+        register(client)
+        register(client, "badge-002", "esp32-other")
+        post_scan(client, scan("recent-one", -10))
+        assert snapshot(client).sites[0].heat == "medium"
+        post_scan(client, scan("recent-two", -5).model_copy(update={"badge_id": "badge-002"}))
+        result = snapshot(client)
+        assert result.sites[0].recent_unique_badges == 2
+        assert result.sites[0].heat == "high"
+        assert result.sites[1].heat == "insufficient"
+        assert result.heat_thresholds.medium_min == 1
+        assert result.heat_thresholds.high_min == 2
+        assert result.demo_thresholds is True
+        activity = client.get("/api/v1/activity", headers=operator())
+        assert activity.status_code == 200
+        assert ActivitySnapshot.model_validate_json(activity.text).map == result
+        refresh_site(client, "B")
+        recommended = client.post("/api/v1/recommendations",
+                                 content='{"badge_id":"badge-001","event_id":"recent-one"}', headers=operator())
+        assert recommended.status_code == 200
+        recommendation = RecommendationResult.model_validate_json(recommended.text)
+        assert recommendation.input.catalog_version == 2
+        assert recommendation.input.heat_thresholds.medium_min == 1
+        assert recommendation.input.heat_thresholds.high_min == 2
+    with TestClient(create_app(tmp_path / "thresholds.sqlite3", "operator-test", "terminal-test",
+                              lambda: NOW)) as reconfigured:
+        current = snapshot(reconfigured)
+        assert current.sites[0].recent_unique_badges == 2 and current.sites[0].heat == "low"
+        history = reconfigured.get("/api/v1/recommendations/" + recommendation.snapshot_id, headers=operator())
+        assert history.status_code == 200
+        assert RecommendationRecord.model_validate_json(history.text).result == recommendation

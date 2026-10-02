@@ -4,7 +4,7 @@ from typing import Annotated, Literal, Self
 
 from pydantic import Field, FiniteFloat, model_validator
 
-from .models import Contract, SiteId
+from .models import Contract, HeatThresholds, SiteId
 
 
 class SiteDefinition(Contract):
@@ -32,6 +32,7 @@ class SiteCatalog(Contract):
     version: Annotated[int, Field(ge=1)] = 1
     source: Literal["demo_site_configuration"] = "demo_site_configuration"
     geographic_map: Literal[False] = False
+    heat_thresholds: HeatThresholds = Field(default_factory=HeatThresholds)
     sites: Annotated[list[SiteDefinition], Field(min_length=3, max_length=3)]
 
     @model_validator(mode="after")

@@ -33,6 +33,10 @@ export type Envelope = z.infer<typeof envelopeSchema>;
 export const sourceSchema = z.enum(["physical_scan_simulated_site", "generated_simulation"]);
 const siteId = z.enum(["A", "B", "C"]);
 const count = z.number().int().nonnegative();
+const heatThresholdsSchema = z.strictObject({
+  medium_min: z.number().int().min(1).max(2147483647),
+  high_min: z.number().int().min(2).max(2147483647),
+}).refine(value => value.high_min > value.medium_min, "高热度起点必须大于中热度起点");
 const siteStatisticsSchema = z.strictObject({
   site_id: siteId, recent_unique_badges: count, previous_unique_badges: count,
   change: z.number().int(), excluded_untrusted_events: count, updated_at: date.nullable(),
@@ -42,6 +46,7 @@ const siteStatisticsSchema = z.strictObject({
 const mapSchema = z.strictObject({
   session_id: z.literal("demo-001"), source: sourceSchema, generated_at: date,
   window_seconds: z.literal(300), stale_after_seconds: z.literal(90), demo_thresholds: z.literal(true),
+  heat_thresholds: heatThresholdsSchema.default({ medium_min: 3, high_min: 6 }),
   metric_label: z.literal("参与腰牌打卡数据；非实时在场人数"), sites: z.array(siteStatisticsSchema),
   trend: z.array(z.strictObject({ site_id: siteId, window_start: date, window_end: date, unique_badges: count })),
   transitions: z.array(z.strictObject({ from_site: siteId, to_site: siteId, count })),
@@ -92,6 +97,7 @@ export const siteDefinitionSchema = z.strictObject({
   && (!value.game_available || value.game_id === "qin_formation"), "节点配置不满足首版可用性约束");
 export const siteCatalogSchema = z.strictObject({
   version: z.number().int().positive(), source: z.literal("demo_site_configuration"), geographic_map: z.literal(false),
+  heat_thresholds: heatThresholdsSchema.default({ medium_min: 3, high_min: 6 }),
   sites: z.array(siteDefinitionSchema).length(3),
 }).refine(value => new Set(value.sites.map(site => site.site_id)).size === 3, "节点配置不完整");
 export type SiteCatalog = z.infer<typeof siteCatalogSchema>;
@@ -100,6 +106,7 @@ export const recommendationRequestSchema = z.strictObject({ badge_id: id, event_
 const recommendationInputSchema = z.strictObject({
   snapshot_id: id, session_id: z.literal("demo-001"), data_source: sourceSchema,
   generated_at: date, expires_at: date, catalog_version: z.number().int().positive(), selected_visit_site: siteId,
+  heat_thresholds: heatThresholdsSchema.default({ medium_min: 3, high_min: 6 }),
   visited_sites: z.array(siteId).max(3), completed_games: z.array(z.literal("qin_formation")).max(1),
   progress_verified_at: date.nullable(), candidates: z.array(z.strictObject({
     site: siteDefinitionSchema, statistics: siteStatisticsSchema, visited: z.boolean(),

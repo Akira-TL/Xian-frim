@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 
 from .models import (
-    HeartbeatReceipt, MapSnapshot, SiteId, SiteStatistics, Source,
+    HeartbeatReceipt, HeatThresholds, MapSnapshot, SiteId, SiteStatistics, Source,
     TransitionCount, TrendPoint, Visit,
 )
 
@@ -15,7 +15,8 @@ def count_badges(visits: list[Visit], start: datetime, end: datetime) -> int:
 
 
 def build_map(visits: list[Visit], heartbeats: list[HeartbeatReceipt],
-              now: datetime, source: Source) -> MapSnapshot:
+              now: datetime, source: Source, thresholds: HeatThresholds | None = None) -> MapSnapshot:
+    thresholds = thresholds or HeatThresholds()
     records = [visit for visit in visits if visit.source == source and visit.session_id == "demo-001"]
     trusted = [visit for visit in records if visit.time_quality == "synced" and visit.captured_at <= now]
     recent_start = now - timedelta(minutes=5)
@@ -41,7 +42,8 @@ def build_map(visits: list[Visit], heartbeats: list[HeartbeatReceipt],
             status = "stale"
         else:
             status = "fresh"
-        heat = "insufficient" if status != "fresh" else ("low" if recent < 3 else "medium" if recent < 6 else "high")
+        heat = "insufficient" if status != "fresh" else (
+            "low" if recent < thresholds.medium_min else "medium" if recent < thresholds.high_min else "high")
         sites.append(SiteStatistics(site_id=site, recent_unique_badges=recent,
                                     previous_unique_badges=previous, change=recent - previous,
                                     excluded_untrusted_events=uncertain, updated_at=updated_at,
@@ -63,4 +65,5 @@ def build_map(visits: list[Visit], heartbeats: list[HeartbeatReceipt],
                         and right.site_id == destination and previous_start < right.captured_at <= now
                         for left, right in zip(routes, routes[1:]))
             transitions.append(TransitionCount(from_site=origin, to_site=destination, count=count))
-    return MapSnapshot(source=source, generated_at=now, sites=sites, trend=trend, transitions=transitions)
+    return MapSnapshot(source=source, generated_at=now, heat_thresholds=thresholds,
+                       sites=sites, trend=trend, transitions=transitions)

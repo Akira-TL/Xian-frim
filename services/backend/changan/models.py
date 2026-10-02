@@ -2,9 +2,9 @@
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 Identifier = Annotated[str, Field(min_length=1, max_length=47, pattern=r"^[A-Za-z0-9_-]+$")]
 CommandId = Annotated[str, Field(min_length=1, max_length=63, pattern=r"^[A-Za-z0-9_-]+$")]
@@ -133,6 +133,17 @@ class TransitionCount(Contract):
     count: int
 
 
+class HeatThresholds(Contract):
+    medium_min: Annotated[int, Field(strict=True, ge=1, le=2147483647)] = 3
+    high_min: Annotated[int, Field(strict=True, ge=2, le=2147483647)] = 6
+
+    @model_validator(mode="after")
+    def ordered(self) -> Self:
+        if self.high_min <= self.medium_min:
+            raise ValueError("高热度起点必须大于中热度起点")
+        return self
+
+
 class MapSnapshot(Contract):
     session_id: Literal["demo-001"] = "demo-001"
     source: Source
@@ -140,6 +151,7 @@ class MapSnapshot(Contract):
     window_seconds: Literal[300] = 300
     stale_after_seconds: Literal[90] = 90
     demo_thresholds: Literal[True] = True
+    heat_thresholds: HeatThresholds = Field(default_factory=HeatThresholds)
     metric_label: Literal["参与腰牌打卡数据；非实时在场人数"] = "参与腰牌打卡数据；非实时在场人数"
     sites: list[SiteStatistics]
     trend: list[TrendPoint]
