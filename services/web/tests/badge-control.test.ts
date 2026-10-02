@@ -109,15 +109,15 @@ test("写入已接受但回执认证失败时只能保留已发送，不能确�
 
 test("写入超时后晚到结果不能继续确认，新的操作也必须重连", async () => {
   const { badge, link, visit } = await fixture();
-  const control = new BadgeControl(badge, link, api, { timeoutMs: 80 });
+  const control = new BadgeControl(badge, link, api, { timeoutMs: 1_000 });
   await control.sync();
   const write = link.write.bind(link);
   link.write = async packet => {
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise(resolve => setTimeout(resolve, 1_500));
     await write(packet);
   };
   await assert.rejects(control.unlock(visit), /超时/);
-  await new Promise(resolve => setTimeout(resolve, 250));
+  await new Promise(resolve => setTimeout(resolve, 1_600));
   assert.equal((await api.commands()).find(item => item.event_id === visit.event_id)?.status, "pending");
   assert.equal((await api.progress(badge.badge_id)).unlocked, false);
   await assert.rejects(control.sync(), /重连/);
