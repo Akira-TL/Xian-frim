@@ -15,6 +15,7 @@
 | [固件架构](architecture.md) | 启动顺序、模块划分、音频、存储和网络架构 |
 | [中文协议说明](protocol/ESP32S3_CHAT_BADGE_PROTOCOL_CN.md) | WebSocket、MQTT/UDP、MCP、OTA、VB6824 UART 和 BLE 素材协议 |
 | [长安游迹终端接口](protocol/长安游迹终端接口.md) | K230 对接边界、到访去重、地点版本、身份校验与解锁请求 |
+| [长安游迹腰牌蓝牙接口](protocol/长安游迹腰牌蓝牙接口.md) | 手机主链路、稳定设备身份和本地游戏进度读取 |
 | [网络端点清单](network-endpoints.md) | 源码中可见的外部 URL、用途和发布建议 |
 | [开源检查清单](open-source-checklist.md) | 发布前的源码、授权、安全和硬件检查 |
 | [发布流程](releasing.md) | Tag、固件产物、校验值和 GitHub Release 流程 |

@@ -185,6 +185,10 @@ Ota ota_;
 
 void WifiBoard::StartNetwork()
 {
+#ifdef CONFIG_SUPPORT_MINI_PROGRAMS_REPLACE_PSD
+    // 腰牌本地控制无需等待联网；与素材服务共用一个 NimBLE 协议栈。
+    min_program_ble_start();
+#endif
     // User can press BOOT button while starting to enter WiFi configuration mode
     if (wifi_config_mode_)
     {
@@ -234,11 +238,6 @@ void WifiBoard::StartNetwork()
         return;
     }
 
-    // WiFi连接成功后，启动小程序BLE服务
-#ifdef CONFIG_SUPPORT_MINI_PROGRAMS_REPLACE_PSD
-    ESP_LOGI(TAG, "Starting Mini Program BLE service...");
-    min_program_ble_start();
-#endif
 }
 
 NetworkInterface *WifiBoard::GetNetwork()

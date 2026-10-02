@@ -9,6 +9,7 @@
 
 #include "application.h"
 #include "system_info.h"
+#include "services/exploration/exploration_ble.h"
 
 #define TAG "main"
 
@@ -25,6 +26,8 @@ extern "C" void app_main(void)
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+
+    exploration_ble_register();
 
     // Launch the application
     auto& app = Application::GetInstance();

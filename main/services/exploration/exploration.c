@@ -1,6 +1,7 @@
 #include "exploration.h"
 
 #include <string.h>
+#include <stdatomic.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "nvs.h"
@@ -15,7 +16,8 @@ typedef struct {
 
 static SemaphoreHandle_t mutex;
 static nvs_handle_t storage;
-static bool ready;
+// 初始化来自界面任务，远程读取来自蓝牙任务，发布时同步初始化后的状态。
+static atomic_bool ready;
 static saved_progress_t saved;
 static qin_progress_t progress;
 static qin_puzzle_t puzzle;

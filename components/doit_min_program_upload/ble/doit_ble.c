@@ -24,6 +24,7 @@ static void nimble_host_config_init(void);
 static void nimble_host_task(void *param);
 
 static doit_ble_ready_cb_t ble_ready_cb = NULL;
+static doit_ble_gatt_cb_t extra_gatt_cb = NULL;
 
 /* Private functions */
 /*
@@ -76,8 +77,14 @@ void doit_ble_ready_cb_register(doit_ble_ready_cb_t cb)
     ble_ready_cb = cb;
 }
 
+void doit_ble_gatt_cb_register(doit_ble_gatt_cb_t cb)
+{
+    extra_gatt_cb = cb;
+}
+
 void min_program_ble_start(void)
 {
+    if (ble_initialized) return;
     // if (ble_ready_cb)
     // {
     //     ble_ready_cb();
@@ -93,12 +100,7 @@ void min_program_ble_start(void)
      * Dependency of BLE stack to store configurations
      */
     ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES ||
-        ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
-    {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
+    // BLE 启动不能为恢复自身配置而擦除活动进度；错误交由启动层处理。
     if (ret != ESP_OK)
     {
         ESP_LOGE(TAG,"failed to initialize nvs flash, error code: %d ", ret);
@@ -127,6 +129,12 @@ void min_program_ble_start(void)
     if (rc != 0)
     {
         ESP_LOGE(TAG,"failed to initialize GATT server, error code: %d", rc);
+        return;
+    }
+
+    if (extra_gatt_cb && (rc = extra_gatt_cb()) != 0)
+    {
+        ESP_LOGE(TAG, "failed to initialize application GATT service: %d", rc);
         return;
     }
 
