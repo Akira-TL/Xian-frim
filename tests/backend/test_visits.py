@@ -134,3 +134,9 @@ def test_registry_and_visits_survive_backend_restart(tmp_path: Path) -> None:
     post_scan(first, scan())
     restarted = TestClient(create_app(path, "operator-test", "terminal-test", lambda: NOW))
     assert post_scan(restarted, scan()).duplicate
+
+
+def test_non_ascii_authorization_is_rejected_without_server_error(client: TestClient) -> None:
+    # HTTP 字段可携带单字节扩展字符；无效令牌应返回 401 而不是抛出异常。
+    response = client.get("/api/v1/visits", headers=[("Authorization", b"Bearer \xff")])
+    assert response.status_code == 401

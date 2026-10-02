@@ -18,13 +18,15 @@ from .storage import BusinessError, Repository
 
 def create_app(db_path: Path, operator_token: str, terminal_token: str,
                clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)) -> FastAPI:
-    if not operator_token or not terminal_token or operator_token == terminal_token:
+    if (not operator_token or not terminal_token or operator_token == terminal_token
+            or not operator_token.isascii() or not terminal_token.isascii()):
         raise ValueError("请配置不同的工作人员和终端访问令牌")
     repository = Repository(db_path)
     app = FastAPI(title="长安游迹接口", version="0.1.0")
 
     def verify(token: str, authorization: str | None) -> None:
-        if authorization is None or not secrets.compare_digest(authorization, "Bearer " + token):
+        if (authorization is None or not authorization.isascii()
+                or not secrets.compare_digest(authorization, "Bearer " + token)):
             raise HTTPException(status_code=401, detail="访问令牌无效")
 
     def operator(authorization: Annotated[str | None, Header()] = None) -> None:
