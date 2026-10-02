@@ -540,7 +540,7 @@ bool chat_background_load_to_cache(const char *path, void **out_img_dsc)
     // 注意：header 字段（宽度、高度、格式）由 LVGL 在解码时自动填充
 
     *out_img_dsc = (void *)&s_image_cache.img_dsc;
-    ESP_LOGI(TAG, "Loaded to cache: %s (%zu bytes)", path, file_size);
+    ESP_LOGI(TAG, "Loaded to cache: %s (%ld bytes)", path, file_size);
 
     return true;
 }
