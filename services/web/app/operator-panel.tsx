@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import { badgeSchema, type Badge, type Command, type DeviceState, type Visit } from "../lib/contracts";
 import { BadgeControl, type ControlPhase } from "../lib/badge-control";
 import { bluetoothSupport, connectBadge } from "../lib/web-bluetooth";
+import RecommendationPanel from "./recommendation-panel";
 
 const siteNames = { A: "秦俑工坊", B: "长安城门", C: "诗意庭院" };
 const commandNames = { pending: "待发送", sent: "已发送，执行未确认", confirmed: "设备已确认执行", unknown: "结果未确认", failed: "请求失败" };
@@ -158,6 +159,7 @@ export default function OperatorPanel() {
             <p>最近认证时间：{time(progress.verified_at)}</p>
             <p>孩子离开手机通信范围后，已解锁游戏仍可在腰牌本地游玩。</p>
           </div>}
+          <RecommendationPanel key={selected.event_id} visit={selected} disabled={busy || !online} />
         </div> : <p className="mt-8 text-stone-500">选择左侧一条记录以核对腰牌。</p>}
       </section>
     </div>
