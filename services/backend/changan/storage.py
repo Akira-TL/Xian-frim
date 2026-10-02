@@ -2,6 +2,7 @@
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
@@ -18,6 +19,14 @@ class BusinessError(Exception):
         super().__init__(detail)
         self.status = status
         self.detail = detail
+
+
+@dataclass(frozen=True)
+class RecommendationObservations:
+    visits: list[Visit]
+    heartbeats: list[HeartbeatReceipt]
+    qin_completed: bool | None
+    verified_at: datetime | None
 
 
 class Repository:
@@ -158,6 +167,19 @@ class Repository:
         with self.connection() as db:
             db.execute("BEGIN")
             return self._read_observations(db)
+
+    def recommendation_observations(self, badge_id: str) -> RecommendationObservations:
+        # 候选统计与该腰牌的认证进度来自同一读取事务。
+        with self.connection() as db:
+            db.execute("BEGIN")
+            visits, heartbeats = self._read_observations(db)
+            progress = db.execute("SELECT flags, verified_at FROM verified_progress WHERE badge_id=?",
+                                  (badge_id,)).fetchone()
+            return RecommendationObservations(
+                visits=visits, heartbeats=heartbeats,
+                qin_completed=None if progress is None else bool(progress["flags"] & 2),
+                verified_at=None if progress is None else datetime.fromisoformat(progress["verified_at"]),
+            )
 
     def activity_observations(self) -> tuple[list[Visit], list[HeartbeatReceipt], DeviceProgressSummary]:
         # 地图与设备进度必须来自同一读取事务。
