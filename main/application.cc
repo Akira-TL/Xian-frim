@@ -17,6 +17,7 @@
 #include <font_awesome.h>
 #include "custom_ota.h"
 #include "cl_ui.h"
+#include "doit_ble.h"
 extern "C" {
     int page_change(const char *name);
 }
@@ -504,6 +505,14 @@ void Application::Start() {
         ((Application*)arg)->MainEventLoop();
         vTaskDelete(NULL);
     }, "main_event_loop", 2048 * 4, this, 3, &main_event_loop_task_handle_);
+
+    // 长安游迹腰牌通过手机转发后台消息，不进入旧语音终端的配网和远程升级流程。
+    // 保留音频服务与主事件任务，屏幕和游戏无需 Wi-Fi 即可使用。
+    if (std::strcmp(CONFIG_BOARD_PATH, "esp32s3-chat-badge") == 0) {
+        min_program_ble_start();
+        SystemInfo::PrintHeapStats();
+        return;
+    }
 
     /* Start the clock timer to update the status bar */
     esp_timer_start_periodic(clock_timer_handle_, 1000000);
