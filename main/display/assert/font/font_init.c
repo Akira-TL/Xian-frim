@@ -1,4 +1,5 @@
 #include "lvgl.h"
+#include "font_init.h"
 #include <stdint.h>
 #include "esp_log.h"
 
@@ -17,7 +18,7 @@ uint8_t font_ext_puhui_20_4_init() {
     return 0;
 }
 
-void cl_font_init() {
+void cl_font_init(void) {
     ESP_LOGI(TAG, "Starting font initialization...");
     
     extern const lv_font_t BUILTIN_TEXT_FONT;
