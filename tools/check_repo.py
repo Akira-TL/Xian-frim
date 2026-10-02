@@ -31,6 +31,7 @@ TEXT_SUFFIXES = {
     ".c", ".cc", ".cpp", ".h", ".hpp", ".cmake", ".txt", ".md", ".yml",
     ".yaml", ".json", ".py", ".sh", ".ps1", ".csv", ".cfg", ".html",
 }
+GENERATED_DIRS = {"build", "managed_components", "__pycache__"}
 FORBIDDEN_TEXT = {
     "git.doit": "internal Git host",
     "/home/zgf/": "developer-local absolute path",
@@ -122,7 +123,7 @@ def check_partition_table(errors: list[str]) -> None:
 
 
 def iter_text_files():
-    ignored_parts = {".git", "build", "managed_components", "__pycache__"}
+    ignored_parts = {".git", *GENERATED_DIRS}
     scanner_path = Path(__file__).resolve()
     for path in ROOT.rglob("*"):
         if path.resolve() == scanner_path:
@@ -159,6 +160,9 @@ def check_text(errors: list[str]) -> None:
 def check_nested_git(errors: list[str]) -> None:
     for path in ROOT.rglob(".git"):
         if path == ROOT / ".git":
+            continue
+        relative_parts = path.relative_to(ROOT).parts
+        if any(part in GENERATED_DIRS for part in relative_parts):
             continue
         errors.append(f"nested Git metadata found: {path.relative_to(ROOT)}")
 
