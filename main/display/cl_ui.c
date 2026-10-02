@@ -9,6 +9,8 @@
 #include "esp_lvgl_port.h"
 // #endif
 #include "page_manager/inc/page_manager_private.h"
+#include "services/exploration/exploration.h"
+#include "esp_log.h"
 
 #define TAG "CL_UI"
 
@@ -218,6 +220,10 @@ void wakeup_ai(){
 }
 
 void ui_init(){
+    esp_err_t progress_error = exploration_init();
+    if (progress_error != ESP_OK) {
+        ESP_LOGE(TAG, "Exploration storage unavailable: %s", esp_err_to_name(progress_error));
+    }
     lv_event_system_init(4096, 3);
     lv_style_init(&s_global_font_style);
     lv_style_set_bg_color(&s_global_font_style, lv_color_hex(0xFFFFFF));

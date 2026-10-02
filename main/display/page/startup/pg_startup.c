@@ -12,7 +12,7 @@ void onTimer(lv_timer_t *timer)
     page_manager_t *manager = page_base->manager;
 
     startup_timer = NULL; // 定时器触发后清空引用
-    page_change("home");
+    page_change("exploration");
 }
 
 static void on_custom_attr_config(page_base_t *self)
