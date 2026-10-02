@@ -11,7 +11,8 @@ export CHANGAN_BACKEND_ORIGIN="http://127.0.0.1:8123"
 export CHANGAN_TEST_WEB_ORIGIN="http://127.0.0.1:3101"
 export CHANGAN_PORT=8123
 export PORT=3101
-unset CHANGAN_DEVICE_KEYS_PATH CHANGAN_PUBLIC_ORIGIN
+export CHANGAN_DEVICE_KEYS_PATH="${project_root}/services/web/tests/fixtures/device-keys.test.json"
+unset CHANGAN_PUBLIC_ORIGIN
 backend_pid=""
 web_pid=""
 cleanup() {
@@ -32,4 +33,5 @@ for ((attempt=0; attempt<60; attempt++)); do
 done
 [[ "${ready}" == true ]] || { echo "隔离服务未就绪，查看 logs/" >&2; exit 1; }
 node --test services/web/tests/public-gateway.test.ts > logs/web-gateway-test.log 2>&1
+node --test services/web/tests/badge-control.test.ts > logs/web-control-test.log 2>&1
 echo "查询测试结果：logs/web-gateway-test.log；隔离数据库保留在 ${test_dir}"
