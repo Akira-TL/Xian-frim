@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 import { sourceSchema, type ActivitySnapshot, type DataSource } from "../../lib/contracts";
 import ScenarioPanel from "./scenario-panel";
+import RecommendationChooser from "./recommendation-chooser";
 
 const siteNames = { A: "秦俑工坊", B: "长安城门", C: "诗意庭院" };
 const statusNames = { fresh: "数据新鲜", stale: "数据已过时", missing: "尚无数据", untrusted: "时间不可靠" };
@@ -126,7 +127,8 @@ export default function Dashboard() {
         </div>
       </div>
     </>}
+    <RecommendationChooser key={source} source={source} refresh={refresh} />
     <ScenarioPanel />
-    <footer className={panel}>AI 下一站推荐尚未交付；情景推演与到访观测、游戏进度完全独立。</footer>
+    <footer className={panel}>当前 AI 未配置；规则建议明确标注来源。情景推演与到访观测、游戏进度完全独立。</footer>
   </main>;
 }
