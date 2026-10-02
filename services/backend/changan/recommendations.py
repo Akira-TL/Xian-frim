@@ -97,6 +97,19 @@ class RecommendationAudit(Contract):
     result: RecommendationResult
 
 
+class RecommendationRejection(Contract):
+    recorded_at: datetime
+    badge_id: Identifier
+    event_id: CommandId
+    reason: Literal["expired"]
+    model_attempted: bool
+    raw_output: Annotated[str, Field(max_length=4096)] | None
+    raw_sha256: str | None
+    raw_truncated: bool
+    validation: Literal["not_requested", "accepted", "invalid_output", "timeout", "unavailable"]
+    input: RecommendationInput
+
+
 class RecommendationService:
     def __init__(self, repository: Repository, catalog: SiteCatalog,
                  model: RecommendationModel | None = None) -> None:
@@ -123,8 +136,6 @@ class RecommendationService:
                         result = self._validated_result(raw, result)
                 except (ValidationError, ValueError):
                     result = self._rule(result.input, "invalid_output")
-        if result.input.expires_at <= clock():
-            raise BusinessError(409, "推荐输入快照已过期，请重新生成，不使用晚到结果")
         validation: Literal["not_requested", "accepted", "invalid_output", "timeout", "unavailable"] = "not_requested"
         if attempted:
             if result.source == "model":
@@ -136,12 +147,24 @@ class RecommendationService:
                                     raw_sha256=None if raw is None else sha256(raw.encode("utf-8")).hexdigest(),
                                     raw_truncated=raw is not None and len(raw) > 4096,
                                     validation=validation, result=result)
+        if result.input.expires_at <= audit.recorded_at:
+            rejection = RecommendationRejection(
+                recorded_at=audit.recorded_at, badge_id=request.badge_id, event_id=request.event_id,
+                reason="expired", model_attempted=audit.model_attempted, raw_output=audit.raw_output,
+                raw_sha256=audit.raw_sha256, raw_truncated=audit.raw_truncated,
+                validation=audit.validation, input=result.input)
+            self.repository.save_recommendation_rejection(result.snapshot_id, rejection.model_dump_json())
+            raise BusinessError(409, "推荐输入快照已过期，请重新生成，不使用晚到结果")
         self.repository.save_recommendation(result.snapshot_id, request.badge_id, request.event_id,
                                              result.model_dump_json(), audit.model_dump_json())
         return result
 
     def audit(self, snapshot_id: str) -> RecommendationAudit:
         return RecommendationAudit.model_validate_json(self.repository.recommendation_audit_json(snapshot_id))
+
+    def rejections(self) -> list[RecommendationRejection]:
+        return [RecommendationRejection.model_validate_json(record)
+                for record in self.repository.recommendation_rejections_json()]
 
     async def _model_output(self, snapshot: RecommendationInput) -> str | None:
         assert self.model is not None

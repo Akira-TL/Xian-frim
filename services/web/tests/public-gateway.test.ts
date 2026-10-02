@@ -121,6 +121,7 @@ test("免登录推荐及历史查询不冒充实时模型或制造实物进度",
   assert.equal(history.delivery, "historical");
   assert.deepEqual(history.result, result);
   assert.equal((await fetch(`${web}/api/v1/recommendations/${result.snapshot_id}/audit`)).status, 404);
+  assert.equal((await fetch(`${web}/api/v1/recommendation-rejections`)).status, 404);
   assert.equal((await fetch(`${web}/api/v1/badges/recommend-test/progress`)).status, 404);
   const foreign = await fetch(`${web}/api/v1/recommendations`, {
     method: "POST", headers: { "Content-Type": "application/json", Origin: "https://foreign.invalid" }, body: "{}",

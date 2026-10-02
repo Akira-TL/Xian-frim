@@ -197,6 +197,15 @@ class Repository:
                 raise BusinessError(404, "该推荐没有审计记录，不补造历史证据")
             return row["audit_json"]
 
+    def save_recommendation_rejection(self, snapshot_id: str, rejection_json: str) -> None:
+        with self.connection(write=True) as db:
+            db.execute("INSERT INTO recommendation_rejections VALUES (?, ?)", (snapshot_id, rejection_json))
+
+    def recommendation_rejections_json(self) -> list[str]:
+        with self.connection() as db:
+            rows = db.execute("SELECT rejection_json FROM recommendation_rejections ORDER BY rowid DESC LIMIT 100").fetchall()
+            return [row["rejection_json"] for row in rows]
+
     def recommendation_json(self, snapshot_id: str) -> str:
         with self.connection() as db:
             row = db.execute("SELECT result_json FROM recommendations WHERE snapshot_id=?", (snapshot_id,)).fetchone()

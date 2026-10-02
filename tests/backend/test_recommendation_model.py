@@ -5,10 +5,11 @@ from pathlib import Path
 from time import monotonic
 
 from fastapi.testclient import TestClient
+from pydantic import TypeAdapter
 import pytest
 
 from changan.api import create_app
-from changan.recommendations import ModelUnavailable, RecommendationAudit, RecommendationInput, RecommendationResult
+from changan.recommendations import ModelUnavailable, RecommendationAudit, RecommendationInput, RecommendationRejection, RecommendationResult
 from test_recommendations import refresh_site
 from test_visits import NOW, operator, post_scan, register, scan
 
@@ -152,6 +153,47 @@ def test_model_output_after_snapshot_expiry_is_not_a_current_suggestion(tmp_path
                                content='{"badge_id":"badge-001","event_id":"scan-001"}', headers=operator())
         assert response.status_code == 409
         assert "快照已过期" in response.text
+
+
+def test_expired_output_has_private_rejection_evidence_without_a_suggestion(tmp_path: Path) -> None:
+    clock = TestClock()
+    database = tmp_path / "rejected.sqlite3"
+    with TestClient(create_app(database, "operator-test", "terminal-test", clock,
+                              recommendation_model=ExpiredModel(clock))) as client:
+        register(client)
+        post_scan(client, scan())
+        refresh_site(client, "B")
+        refresh_site(client, "C")
+        response = client.post("/api/v1/recommendations",
+                               content='{"badge_id":"badge-001","event_id":"scan-001"}', headers=operator())
+        assert response.status_code == 409
+        evidence = client.get("/api/v1/recommendation-rejections", headers=operator())
+        assert evidence.status_code == 200
+        records = TypeAdapter(list[RecommendationRejection]).validate_json(evidence.text)
+        assert len(records) == 1
+        record = records[0]
+        assert record.reason == "expired"
+        assert record.badge_id == "badge-001"
+        assert record.event_id == "scan-001"
+        assert record.model_attempted is True
+        assert record.validation == "accepted"
+        assert record.raw_output == ('{"snapshot_id":"' + record.input.snapshot_id
+                + '","selected_site":"C","child_text":"下一站去诗意庭院看看吧。",'
+                '"operator_reason":"诗意庭院在本次候选中，可查看庭院文字内容。"}')
+        assert record.input.selected_visit_site == "A"
+        assert record.input.data_source == "physical_scan_simulated_site"
+        assert record.input.completed_games == []
+        assert record.raw_truncated is False
+        assert record.raw_sha256 is not None and len(record.raw_sha256) == 64
+        snapshot_id = record.input.snapshot_id
+        assert client.get("/api/v1/recommendations/" + snapshot_id, headers=operator()).status_code == 404
+        assert client.get("/api/v1/unlock-commands", headers=operator()).text == "[]"
+        assert client.get("/api/v1/recommendation-rejections").status_code == 401
+        assert client.get("/api/v1/recommendation-rejections",
+                          headers={"Authorization": "Bearer terminal-test"}).status_code == 401
+    with TestClient(create_app(database, "operator-test", "terminal-test", clock)) as restarted:
+        persisted = restarted.get("/api/v1/recommendation-rejections", headers=operator())
+        assert TypeAdapter(list[RecommendationRejection]).validate_json(persisted.text) == records
 
 
 class UnreachableModel:
