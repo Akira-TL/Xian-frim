@@ -18,12 +18,11 @@ extern "C" void app_main(void)
     // Initialize the default event loop
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    // Initialize NVS flash for WiFi configuration
+    // NVS also contains exploration progress; never erase it during startup.
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_LOGW(TAG, "Erasing NVS flash to fix corruption");
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
+        ESP_LOGE(TAG, "NVS initialization failed (%s); preserving stored data. "
+                      "Explicit recovery is required before startup.", esp_err_to_name(ret));
     }
     ESP_ERROR_CHECK(ret);
 
