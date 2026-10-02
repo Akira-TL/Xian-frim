@@ -57,6 +57,12 @@ class Repository:
                     raise BusinessError(409, "该实物设备已经绑定其他腰牌") from error
         return badge
 
+    def badges(self) -> list[BadgeRegistration]:
+        with self.connection() as db:
+            return [BadgeRegistration(badge_id=row["badge_id"], display_number=row["display_number"],
+                                      device_id=row["device_id"])
+                    for row in db.execute("SELECT * FROM badges ORDER BY badge_id")]
+
     @staticmethod
     def visit(row: sqlite3.Row) -> Visit:
         return Visit(

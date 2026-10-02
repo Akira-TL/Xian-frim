@@ -45,6 +45,17 @@ def post_scan(client: TestClient, request: ScanRequest, route: str = "/api/v1/vi
     return ScanResponse.model_validate_json(response.text)
 
 
+def test_staff_can_read_registry_without_exposing_it_to_terminal(client: TestClient) -> None:
+    register(client)
+    response = client.get("/api/v1/badges", headers=operator())
+    assert response.status_code == 200
+    assert TypeAdapter(list[BadgeRegistration]).validate_json(response.text) == [
+        BadgeRegistration(badge_id="badge-001", display_number="001", device_id="esp32-test")
+    ]
+    assert client.get("/api/v1/badges", headers=terminal()).status_code == 401
+    assert client.get("/api/v1/badges").status_code == 401
+
+
 def test_scan_retry_and_short_window_have_one_visit(client: TestClient) -> None:
     register(client)
     first = post_scan(client, scan())

@@ -59,6 +59,10 @@ def create_app(db_path: Path, operator_token: str, terminal_token: str,
     def register(request: BadgeRegistration) -> BadgeRegistration:
         return repository.register(request)
 
+    @app.get("/api/v1/badges", dependencies=[Depends(operator)])
+    def badges() -> list[BadgeRegistration]:
+        return repository.badges()
+
     @app.post("/api/v1/visits", dependencies=[Depends(terminal)])
     def scan(request: ScanRequest) -> ScanResponse:
         return repository.scan(request, clock())
