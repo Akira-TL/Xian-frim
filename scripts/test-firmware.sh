@@ -7,4 +7,5 @@ cc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined \
     "${project_root}/tests/firmware/qin_game_test.c" \
     "${project_root}/main/services/exploration/qin_game.c" \
     -o "${test_dir}/qin_game_test"
-"${test_dir}/qin_game_test"
+# 沙箱以 ptrace 执行进程，LeakSanitizer 无法工作；仍启用地址和未定义行为检查。
+ASAN_OPTIONS=detect_leaks=0 "${test_dir}/qin_game_test"
