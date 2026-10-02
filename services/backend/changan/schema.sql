@@ -47,3 +47,17 @@ CREATE TABLE IF NOT EXISTS heartbeats (
     received_at TEXT NOT NULL,
     PRIMARY KEY (terminal_id, site_id)
 );
+CREATE TABLE IF NOT EXISTS device_challenges (
+    challenge TEXT PRIMARY KEY,
+    badge_id TEXT NOT NULL REFERENCES badges(badge_id),
+    device_id TEXT NOT NULL,
+    command_id TEXT REFERENCES commands(command_id),
+    expires_at TEXT NOT NULL,
+    accepted_payload TEXT
+);
+CREATE TABLE IF NOT EXISTS verified_progress (
+    badge_id TEXT PRIMARY KEY REFERENCES badges(badge_id),
+    device_id TEXT NOT NULL,
+    flags INTEGER NOT NULL,
+    verified_at TEXT NOT NULL
+);

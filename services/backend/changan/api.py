@@ -16,14 +16,18 @@ from .models import (
 )
 from .storage import BusinessError, Repository
 from .statistics import build_map
+from .device_protocol import DeviceEnvelope, DeviceKey, DeviceKeys, DeviceReport, DeviceState, NonceRequest
+from .device_service import DeviceService
 
 
 def create_app(db_path: Path, operator_token: str, terminal_token: str,
-               clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)) -> FastAPI:
+               clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+               device_keys: tuple[DeviceKey, ...] = ()) -> FastAPI:
     if (not operator_token or not terminal_token or operator_token == terminal_token
             or not operator_token.isascii() or not terminal_token.isascii()):
         raise ValueError("请配置不同的工作人员和终端访问令牌")
     repository = Repository(db_path)
+    devices = DeviceService(repository, device_keys)
     app = FastAPI(title="长安游迹接口", version="0.1.0")
 
     def verify(token: str, authorization: str | None) -> None:
@@ -92,10 +96,28 @@ def create_app(db_path: Path, operator_token: str, terminal_token: str,
     def sent(command_id: str, request: SentReport) -> UnlockCommand:
         return repository.mark_sent(command_id, request.device_id, clock())
 
+    @app.post("/api/v1/badges/{badge_id}/unlock-commands/{command_id}/authorize", dependencies=[Depends(operator)])
+    def authorize(badge_id: str, command_id: str, request: NonceRequest) -> DeviceEnvelope:
+        return devices.issue(badge_id, clock(), command_id, request.nonce)
+
+    @app.post("/api/v1/badges/{badge_id}/state-challenges", dependencies=[Depends(operator)])
+    def state_challenge(badge_id: str) -> DeviceEnvelope:
+        return devices.issue(badge_id, clock())
+
+    @app.post("/api/v1/device-reports", dependencies=[Depends(operator)])
+    def device_report(request: DeviceReport) -> DeviceState:
+        return devices.confirm(request, clock())
+
+    @app.get("/api/v1/badges/{badge_id}/progress", dependencies=[Depends(operator)])
+    def progress(badge_id: str) -> DeviceState:
+        return devices.progress(badge_id)
+
     return app
 
 
 def create_app_from_environment() -> FastAPI:
+    keys_path = os.environ.get("CHANGAN_DEVICE_KEYS_PATH")
+    keys = () if not keys_path else tuple(DeviceKeys.model_validate_json(Path(keys_path).read_text()).devices)
     return create_app(Path(os.environ.get("CHANGAN_DB_PATH", "data/changan.sqlite3")),
                       os.environ.get("CHANGAN_OPERATOR_TOKEN", ""),
-                      os.environ.get("CHANGAN_TERMINAL_TOKEN", ""))
+                      os.environ.get("CHANGAN_TERMINAL_TOKEN", ""), device_keys=keys)
