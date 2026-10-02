@@ -145,26 +145,25 @@ class Repository:
         return HeartbeatReceipt(terminal_id=request.terminal_id, site_id=request.site_id,
                                 config_version=request.config_version, captured_at=captured, received_at=now)
 
+    def _read_observations(self, db: sqlite3.Connection) -> tuple[list[Visit], list[HeartbeatReceipt]]:
+        visits = [self.visit(row) for row in db.execute("SELECT * FROM visits")]
+        heartbeats = [HeartbeatReceipt(terminal_id=row["terminal_id"], site_id=row["site_id"],
+                                       config_version=row["config_version"], captured_at=row["captured_at"],
+                                       received_at=row["received_at"])
+                      for row in db.execute("SELECT * FROM heartbeats")]
+        return visits, heartbeats
+
     def observations(self) -> tuple[list[Visit], list[HeartbeatReceipt]]:
         # 同一读取事务，避免地图中的到访与终端反馈来自两个不同瞬间。
         with self.connection() as db:
             db.execute("BEGIN")
-            visits = [self.visit(row) for row in db.execute("SELECT * FROM visits")]
-            heartbeats = [HeartbeatReceipt(terminal_id=row["terminal_id"], site_id=row["site_id"],
-                                           config_version=row["config_version"], captured_at=row["captured_at"],
-                                           received_at=row["received_at"])
-                          for row in db.execute("SELECT * FROM heartbeats")]
-            return visits, heartbeats
+            return self._read_observations(db)
 
     def activity_observations(self) -> tuple[list[Visit], list[HeartbeatReceipt], DeviceProgressSummary]:
         # 地图与设备进度必须来自同一读取事务。
         with self.connection() as db:
             db.execute("BEGIN")
-            visits = [self.visit(row) for row in db.execute("SELECT * FROM visits")]
-            heartbeats = [HeartbeatReceipt(terminal_id=row["terminal_id"], site_id=row["site_id"],
-                                           config_version=row["config_version"], captured_at=row["captured_at"],
-                                           received_at=row["received_at"])
-                          for row in db.execute("SELECT * FROM heartbeats")]
+            visits, heartbeats = self._read_observations(db)
             row = db.execute("""
                 WITH eligible AS (
                     SELECT DISTINCT badge_id FROM visits
