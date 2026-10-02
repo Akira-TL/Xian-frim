@@ -96,6 +96,10 @@ def create_app(db_path: Path, operator_token: str, terminal_token: str,
     def unlock(request: UnlockRequest) -> UnlockCommand:
         return repository.unlock(request, clock())
 
+    @app.get("/api/v1/unlock-commands", dependencies=[Depends(operator)])
+    def commands() -> list[UnlockCommand]:
+        return repository.commands()
+
     @app.post("/api/v1/unlock-commands/{command_id}/sent", dependencies=[Depends(operator)])
     def sent(command_id: str, request: SentReport) -> UnlockCommand:
         return repository.mark_sent(command_id, request.device_id, clock())

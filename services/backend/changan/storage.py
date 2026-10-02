@@ -173,6 +173,11 @@ class Repository:
             expires_at=row["expires_at"], status=row["status"],
         )
 
+    def commands(self) -> list[UnlockCommand]:
+        with self.connection() as db:
+            return [self.command(row) for row in db.execute(
+                "SELECT * FROM commands ORDER BY created_at DESC, command_id")]
+
     def unlock(self, request: UnlockRequest, now: datetime) -> UnlockCommand:
         with self.connection(write=True) as db:
             visit = db.execute("SELECT * FROM visits WHERE event_id = ?", (request.event_id,)).fetchone()

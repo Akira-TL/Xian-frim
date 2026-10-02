@@ -151,3 +151,24 @@ def test_non_ascii_authorization_is_rejected_without_server_error(client: TestCl
     # HTTP 字段可携带单字节扩展字符；无效令牌应返回 401 而不是抛出异常。
     response = client.get("/api/v1/visits", headers=[("Authorization", b"Bearer \xff")])
     assert response.status_code == 401
+def test_staff_reads_request_status_without_confirming_execution(client: TestClient) -> None:
+    register(client)
+    post_scan(client, scan())
+    request = UnlockRequest(command_id="unlock-001", event_id="scan-001",
+                            badge_id="badge-001", device_id="esp32-test")
+    created = client.post("/api/v1/unlock-commands", content=request.model_dump_json(), headers=operator())
+    pending = UnlockCommand.model_validate_json(created.text)
+    response = client.get("/api/v1/unlock-commands", headers=operator())
+    assert response.status_code == 200
+    assert TypeAdapter(list[UnlockCommand]).validate_json(response.text) == [pending]
+    client.post("/api/v1/unlock-commands/unlock-001/sent",
+                content=SentReport(device_id="esp32-test").model_dump_json(), headers=operator())
+    for _ in range(2):
+        listed = TypeAdapter(list[UnlockCommand]).validate_json(
+            client.get("/api/v1/unlock-commands", headers=operator()).text)
+        assert listed == [pending.model_copy(update={"status": "sent"})]
+    assert client.get("/api/v1/badges/badge-001/progress", headers=operator()).status_code == 404
+    assert client.get("/api/v1/unlock-commands", headers=terminal()).status_code == 401
+    assert client.get("/api/v1/unlock-commands").status_code == 401
+
+
