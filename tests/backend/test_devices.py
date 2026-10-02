@@ -110,3 +110,17 @@ def test_expired_challenge_cannot_create_progress(tmp_path: Path) -> None:
     later = TestClient(create_app(path, "operator-test", "terminal-test", lambda: NOW + timedelta(seconds=31), keys))
     assert submit(later, report(envelope, 7, command="")).status_code == 409
     assert later.get("/api/v1/badges/badge-001/progress", headers=operator()).status_code == 404
+
+
+def test_authenticated_progress_survives_backend_restart(device_client: TestClient, tmp_path: Path) -> None:
+    envelope = authorize(device_client)
+    receipt = report(envelope, 15)
+    assert submit(device_client, receipt).status_code == 200
+    restarted = TestClient(create_app(tmp_path / "device.sqlite3", "operator-test", "terminal-test",
+                                     lambda: NOW + timedelta(minutes=2), (DeviceKey(device_id=DEVICE, key=KEY.hex()),)))
+    response = restarted.get("/api/v1/badges/badge-001/progress", headers=operator())
+    progress = DeviceState.model_validate_json(response.text)
+    assert progress.completed and progress.collected and progress.exhibiting
+    # 已消费回执可以幂等重试，但不能假装产生新的认证时间。
+    repeated = DeviceState.model_validate_json(submit(restarted, receipt).text)
+    assert repeated.verified_at == NOW
