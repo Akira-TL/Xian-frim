@@ -50,6 +50,8 @@ mmap_generate_*.h
 
 # Node.js / 前端
 node_modules/
+*.tsbuildinfo
+services/web/next-env.d.ts
 .next/
 .nuxt/
 .svelte-kit/
