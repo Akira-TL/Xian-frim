@@ -13,6 +13,14 @@ from .models import Contract, CommandId, Identifier, SiteId, SiteStatistics, Sou
 from .storage import BusinessError, Repository
 from .statistics import build_map
 
+RuleFailure = Literal["not_configured", "invalid_output", "timeout", "unavailable"]
+RULE_PREFIXES: dict[RuleFailure, str] = {
+    "not_configured": "AI 未配置",
+    "invalid_output": "AI 输出校验失败",
+    "timeout": "AI 八秒内未返回",
+    "unavailable": "AI 服务不可用",
+}
+
 
 class RecommendationRequest(Contract):
     badge_id: Identifier
@@ -42,7 +50,7 @@ class RecommendationInput(Contract):
 class RecommendationResult(Contract):
     snapshot_id: Identifier
     source: Literal["model", "rule_fallback", "none"]
-    fallback_reason: Literal["not_configured", "no_candidates", "invalid_output", "timeout"] | None
+    fallback_reason: RuleFailure | Literal["no_candidates"] | None
     selected_site: SiteId | None
     child_text: Annotated[str, Field(max_length=200)]
     operator_reason: Annotated[str, Field(max_length=500)]
@@ -67,6 +75,10 @@ class RecommendationModel(Protocol):
     async def recommend(self, snapshot: RecommendationInput) -> str: ...
 
 
+class ModelUnavailable(RuntimeError):
+    """由外部适配器转译的服务故障；异常详情不得回显。"""
+
+
 class RecommendationRecord(Contract):
     delivery: Literal["historical"] = "historical"
     retrieved_at: datetime
@@ -85,14 +97,19 @@ class RecommendationService:
         result = self._generate(request, clock())
         if self.model is not None and result.input.candidates:
             snapshot = RecommendationInput.model_validate_json(result.input.model_dump_json())
-            raw = await self._model_output(snapshot)
             try:
-                if raw is None:
-                    result = self._rule(result.input, "timeout")
-                else:
-                    result = self._validated_result(raw, result)
-            except (ValidationError, ValueError):
-                result = self._rule(result.input, "invalid_output")
+                raw = await self._model_output(snapshot)
+            except (OSError, ModelUnavailable):
+                # 网络异常详情可能含服务地址或凭据，不记日志，也不对外回显。
+                result = self._rule(result.input, "unavailable")
+            else:
+                try:
+                    if raw is None:
+                        result = self._rule(result.input, "timeout")
+                    else:
+                        result = self._validated_result(raw, result)
+                except (ValidationError, ValueError):
+                    result = self._rule(result.input, "invalid_output")
         if result.input.expires_at <= clock():
             raise BusinessError(409, "推荐输入快照已过期，请重新生成，不使用晚到结果")
         self.repository.save_recommendation(result.snapshot_id, request.badge_id, request.event_id,
@@ -179,11 +196,11 @@ class RecommendationService:
         return self._rule(snapshot, "not_configured")
 
     @staticmethod
-    def _rule(snapshot: RecommendationInput, reason: Literal["not_configured", "invalid_output", "timeout"]) -> RecommendationResult:
+    def _rule(snapshot: RecommendationInput, reason: RuleFailure) -> RecommendationResult:
         if snapshot.candidates:
             selected = min(snapshot.candidates, key=lambda candidate: (candidate.visited,
                             candidate.statistics.recent_unique_badges, candidate.site.site_id))
-            prefix = "AI 未配置" if reason == "not_configured" else "AI 八秒内未返回" if reason == "timeout" else "AI 输出校验失败"
+            prefix = RULE_PREFIXES[reason]
             explanation = (f"{prefix}；这是演示规则建议，优先尚未到访、近期打卡较少的有效候选。"
                            f"{selected.site.name} 最近五分钟 {selected.statistics.recent_unique_badges} 枚腰牌。")
             if not selected.site.game_available:

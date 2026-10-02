@@ -5,6 +5,13 @@ import { api } from "../lib/api";
 import type { RecommendationResult, Visit } from "../lib/contracts";
 
 type View = { result: RecommendationResult; historical: boolean; historyExpired: boolean };
+const fallbackLabels: Record<NonNullable<RecommendationResult["fallback_reason"]>, string> = {
+  not_configured: "规则建议（AI 未配置）",
+  invalid_output: "规则建议（模型输出校验失败）",
+  timeout: "规则建议（模型八秒内未返回）",
+  unavailable: "规则建议（模型服务不可用）",
+  no_candidates: "无有效候选",
+};
 function time(value: string) { return new Date(value).toLocaleString("zh-CN", { hour12: false }); }
 
 export default function RecommendationPanel({ visit, disabled = false }: { visit: Visit; disabled?: boolean }) {
@@ -25,9 +32,7 @@ export default function RecommendationPanel({ visit, disabled = false }: { visit
   const expired = !!view && (view.historyExpired || Date.parse(view.result.input.expires_at) <= now);
   const candidate = result?.input.candidates.find(item => item.site.site_id === result.selected_site);
   const originLabel = result?.source === "model" ? "模型建议（输出校验通过）"
-    : result?.source === "rule_fallback" ? result.fallback_reason === "invalid_output"
-      ? "规则建议（模型输出校验失败）" : result.fallback_reason === "timeout"
-        ? "规则建议（模型八秒内未返回）" : "规则建议（AI 未配置）" : "无有效候选";
+    : result?.fallback_reason ? fallbackLabels[result.fallback_reason] : "无有效候选";
   const mayChoose = !!candidate && !view?.historical && !expired && !busy && !disabled;
 
   async function request(historical: boolean) {

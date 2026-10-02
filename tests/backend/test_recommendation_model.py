@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from changan.api import create_app
-from changan.recommendations import RecommendationInput, RecommendationResult
+from changan.recommendations import ModelUnavailable, RecommendationInput, RecommendationResult
 from test_recommendations import refresh_site
 from test_visits import NOW, operator, post_scan, register, scan
 
@@ -143,3 +143,39 @@ def test_model_output_after_snapshot_expiry_is_not_a_current_suggestion(tmp_path
                                content='{"badge_id":"badge-001","event_id":"scan-001"}', headers=operator())
         assert response.status_code == 409
         assert "快照已过期" in response.text
+
+
+class UnreachableModel:
+    def __init__(self, service: bool = False) -> None:
+        self.service = service
+
+    async def recommend(self, snapshot: RecommendationInput) -> str:
+        if self.service:
+            raise ModelUnavailable("TEST_PRIVATE_MARKER: 服务错误的内部详情")
+        raise ConnectionError("TEST_PRIVATE_MARKER: 网络失败的内部详情")
+
+
+@pytest.mark.parametrize("service", [False, True])
+def test_unreachable_model_returns_explicit_rule_without_exception_detail(tmp_path: Path,
+                                                                         caplog: pytest.LogCaptureFixture,
+                                                                         service: bool) -> None:
+    with TestClient(create_app(tmp_path / "unreachable.sqlite3", "operator-test", "terminal-test",
+                              lambda: NOW, recommendation_model=UnreachableModel(service))) as client:
+        register(client)
+        post_scan(client, scan())
+        refresh_site(client, "B")
+        refresh_site(client, "C")
+        response = client.post("/api/v1/recommendations",
+                               content='{"badge_id":"badge-001","event_id":"scan-001"}', headers=operator())
+        assert response.status_code == 200
+        result = RecommendationResult.model_validate_json(response.text)
+        assert result.source == "rule_fallback"
+        assert result.fallback_reason == "unavailable"
+        assert result.selected_site == "B"
+        assert "服务不可用" in result.operator_reason
+        assert "TEST_PRIVATE_MARKER" not in response.text
+        history = client.get("/api/v1/recommendations/" + result.snapshot_id, headers=operator())
+        assert '"fallback_reason":"unavailable"' in history.text
+        assert "TEST_PRIVATE_MARKER" not in history.text
+        assert "TEST_PRIVATE_MARKER" not in caplog.text
+        assert client.get("/api/v1/unlock-commands", headers=operator()).text == "[]"
