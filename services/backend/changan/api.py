@@ -18,6 +18,7 @@ from .storage import BusinessError, Repository
 from .statistics import build_map
 from .device_protocol import DeviceEnvelope, DeviceKey, DeviceKeys, DeviceReport, DeviceState, NonceRequest
 from .device_service import DeviceService
+from .simulation import ScenarioRequest, ScenarioResult, simulate
 
 
 def create_app(db_path: Path, operator_token: str, terminal_token: str,
@@ -97,6 +98,10 @@ def create_app(db_path: Path, operator_token: str, terminal_token: str,
         visits, heartbeats, progress = repository.activity_observations()
         return ActivitySnapshot(map=build_map(visits, heartbeats, clock(), source),
                                 progress=progress if source == Source.PHYSICAL else None)
+
+    @app.post("/api/v1/simulation", dependencies=[Depends(operator)])
+    def scenario(request: ScenarioRequest) -> ScenarioResult:
+        return simulate(request, clock())
 
     @app.post("/api/v1/unlock-commands", dependencies=[Depends(operator)])
     def unlock(request: UnlockRequest) -> UnlockCommand:
