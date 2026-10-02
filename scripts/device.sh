@@ -21,7 +21,7 @@ case "${action}" in
         ;;
     flash)
         # 使用已构建的分区映像；不执行 erase-flash，不擦除游戏 NVS 分区。
-        idf.py -B build --no-auto-reconfigure -p "${port}" flash 2>&1 | tee logs/device-flash.log
+        idf.py -B build -DSDKCONFIG=build/sdkconfig -p "${port}" flash 2>&1 | tee logs/device-flash.log
         ;;
     monitor)
         idf.py -B build -p "${port}" monitor 2>&1 | tee logs/device-monitor.log
