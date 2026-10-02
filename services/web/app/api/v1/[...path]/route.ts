@@ -26,7 +26,9 @@ async function forward(request: NextRequest, context: RouteContext): Promise<Res
   // 无登录演示仍拒绝其他网页诱导浏览器跨站写入；命令行联调不受登录限制。
   if (request.method !== "GET") {
     const origin = request.headers.get("origin");
-    const expectedOrigin = process.env.CHANGAN_PUBLIC_ORIGIN ?? request.nextUrl.origin;
+    // Next.js 会把内部 URL 的回环地址归一化为 localhost；浏览器 Origin 保留真实主机。
+    const expectedOrigin = process.env.CHANGAN_PUBLIC_ORIGIN
+      ?? `${request.nextUrl.protocol}//${request.headers.get("host") ?? request.nextUrl.host}`;
     if ((origin && origin !== expectedOrigin) || request.headers.get("sec-fetch-site") === "cross-site") {
       return error("请在演示网页内发起操作", 403);
     }

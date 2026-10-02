@@ -14,7 +14,7 @@ test("演示网页无需登录即可读取登记列表", async () => {
 test("演示参与者能登记腰牌，但不能冒充终端制造实物到访", async () => {
   const registration = { badge_id: "badge-001", display_number: "001", device_id: "esp32s3-001122334455" };
   const registered = await fetch(`${web}/api/v1/badges`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(registration),
+    method: "POST", headers: { "Content-Type": "application/json", Origin: web }, body: JSON.stringify(registration),
   });
   assert.equal(registered.status, 200);
   assert.equal(await registered.text(), JSON.stringify(registration));
