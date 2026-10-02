@@ -166,3 +166,24 @@ def test_recommendation_permissions_and_event_binding_fail_closed(client: TestCl
     assert client.post("/api/v1/recommendations", content=request.replace("badge-001", "badge-other"), headers=operator()).status_code == 409
     assert client.post("/api/v1/recommendations", content=request.replace("scan-001", "unknown"), headers=operator()).status_code == 404
     assert client.post("/api/v1/recommendations", content=request[:-1] + ',"completed":true}', headers=operator()).status_code == 422
+
+
+def test_saved_snapshot_survives_restart_and_is_explicitly_historical(client: TestClient, tmp_path: Path) -> None:
+    register(client)
+    post_scan(client, scan())
+    refresh_site(client, "B")
+    refresh_site(client, "C")
+    created = client.post("/api/v1/recommendations", content='{"badge_id":"badge-001","event_id":"scan-001"}',
+                          headers=operator()).json()
+    restarted = TestClient(create_app(tmp_path / "test.sqlite3", "operator-test", "terminal-test",
+                                      lambda: NOW + timedelta(minutes=2)))
+    response = restarted.get(f'/api/v1/recommendations/{created["snapshot_id"]}', headers=operator())
+    assert response.status_code == 200
+    record = response.json()
+    assert record["delivery"] == "historical"
+    assert record["expired"] is True
+    assert record["result"] == created
+    assert record["result"]["input"]["generated_at"] == "2026-10-02T14:00:00Z"
+    assert restarted.get(f'/api/v1/recommendations/{created["snapshot_id"]}', headers=terminal()).status_code == 200
+    assert restarted.get(f'/api/v1/recommendations/{created["snapshot_id"]}').status_code == 401
+    assert restarted.get("/api/v1/recommendations/unknown", headers=operator()).status_code == 404

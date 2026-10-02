@@ -61,3 +61,9 @@ CREATE TABLE IF NOT EXISTS verified_progress (
     flags INTEGER NOT NULL,
     verified_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS recommendations (
+    snapshot_id TEXT PRIMARY KEY,
+    badge_id TEXT NOT NULL REFERENCES badges(badge_id),
+    event_id TEXT NOT NULL REFERENCES visits(event_id),
+    result_json TEXT NOT NULL
+);

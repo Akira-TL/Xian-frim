@@ -47,12 +47,29 @@ class RecommendationResult(Contract):
     input: RecommendationInput
 
 
+class RecommendationRecord(Contract):
+    delivery: Literal["historical"] = "historical"
+    retrieved_at: datetime
+    expired: bool
+    result: RecommendationResult
+
+
 class RecommendationService:
     def __init__(self, repository: Repository, catalog: SiteCatalog) -> None:
         self.repository = repository
         self.catalog = catalog
 
     def create(self, request: RecommendationRequest, now: datetime) -> RecommendationResult:
+        result = self._generate(request, now)
+        self.repository.save_recommendation(result.snapshot_id, request.badge_id, request.event_id,
+                                             result.model_dump_json())
+        return result
+
+    def read(self, snapshot_id: str, now: datetime) -> RecommendationRecord:
+        result = RecommendationResult.model_validate_json(self.repository.recommendation_json(snapshot_id))
+        return RecommendationRecord(retrieved_at=now, expired=result.input.expires_at <= now, result=result)
+
+    def _generate(self, request: RecommendationRequest, now: datetime) -> RecommendationResult:
         records = self.repository.recommendation_observations(request.badge_id)
         visits, heartbeats = records.visits, records.heartbeats
         event = next((visit for visit in visits if visit.event_id == request.event_id), None)

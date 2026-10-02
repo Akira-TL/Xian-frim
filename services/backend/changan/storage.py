@@ -181,6 +181,18 @@ class Repository:
                 verified_at=None if progress is None else datetime.fromisoformat(progress["verified_at"]),
             )
 
+    def save_recommendation(self, snapshot_id: str, badge_id: str, event_id: str, result_json: str) -> None:
+        with self.connection(write=True) as db:
+            db.execute("INSERT INTO recommendations VALUES (?, ?, ?, ?)",
+                       (snapshot_id, badge_id, event_id, result_json))
+
+    def recommendation_json(self, snapshot_id: str) -> str:
+        with self.connection() as db:
+            row = db.execute("SELECT result_json FROM recommendations WHERE snapshot_id=?", (snapshot_id,)).fetchone()
+            if row is None:
+                raise BusinessError(404, "推荐快照不存在")
+            return row["result_json"]
+
     def activity_observations(self) -> tuple[list[Visit], list[HeartbeatReceipt], DeviceProgressSummary]:
         # 地图与设备进度必须来自同一读取事务。
         with self.connection() as db:
