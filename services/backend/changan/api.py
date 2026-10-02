@@ -21,16 +21,18 @@ from .statistics import build_map
 from .device_protocol import DeviceEnvelope, DeviceKey, DeviceKeys, DeviceReport, DeviceState, NonceRequest
 from .device_service import DeviceService
 from .simulation import ScenarioRequest, ScenarioResult, simulate
+from .catalog import SiteCatalog, default_catalog
 
 
 def create_app(db_path: Path, operator_token: str, terminal_token: str,
                clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
-               device_keys: tuple[DeviceKey, ...] = ()) -> FastAPI:
+               device_keys: tuple[DeviceKey, ...] = (), site_catalog: SiteCatalog | None = None) -> FastAPI:
     if (not operator_token or not terminal_token or operator_token == terminal_token
             or not operator_token.isascii() or not terminal_token.isascii()):
         raise ValueError("请配置不同的工作人员和终端访问令牌")
     repository = Repository(db_path)
     devices = DeviceService(repository, device_keys)
+    catalog = SiteCatalog.model_validate_json((site_catalog or default_catalog()).model_dump_json())
     app = FastAPI(title="长安游迹接口", version="0.1.0")
 
     def verify(token: str, authorization: str | None) -> None:
@@ -65,6 +67,10 @@ def create_app(db_path: Path, operator_token: str, terminal_token: str,
     @app.get("/health", response_model=Health)
     def health() -> Health:
         return Health()
+
+    @app.get("/api/v1/sites", dependencies=[Depends(reader)])
+    def sites() -> SiteCatalog:
+        return catalog
 
     @app.post("/api/v1/badges", dependencies=[Depends(operator)])
     def register(request: BadgeRegistration) -> BadgeRegistration:
@@ -147,6 +153,8 @@ def create_app(db_path: Path, operator_token: str, terminal_token: str,
 def create_app_from_environment() -> FastAPI:
     keys_path = os.environ.get("CHANGAN_DEVICE_KEYS_PATH")
     keys = () if not keys_path else tuple(DeviceKeys.model_validate_json(Path(keys_path).read_text()).devices)
+    catalog_path = os.environ.get("CHANGAN_SITE_CATALOG_PATH")
+    catalog = None if not catalog_path else SiteCatalog.model_validate_json(Path(catalog_path).read_text())
     return create_app(Path(os.environ.get("CHANGAN_DB_PATH", "data/changan.sqlite3")),
                       os.environ.get("CHANGAN_OPERATOR_TOKEN", ""),
-                      os.environ.get("CHANGAN_TERMINAL_TOKEN", ""), device_keys=keys)
+                      os.environ.get("CHANGAN_TERMINAL_TOKEN", ""), device_keys=keys, site_catalog=catalog)
