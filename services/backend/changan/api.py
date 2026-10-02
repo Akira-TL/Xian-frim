@@ -8,6 +8,8 @@ import secrets
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 
 from .models import (
     BadgeRegistration, ErrorResponse, Health, ScanRequest, ScanResponse, SentReport,
@@ -51,6 +53,14 @@ def create_app(db_path: Path, operator_token: str, terminal_token: str,
     async def business_error(request: Request, error: BusinessError) -> Response:
         return Response(content=ErrorResponse(detail=error.detail).model_dump_json(),
                         status_code=error.status, media_type="application/json")
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request: Request, error: RequestValidationError) -> Response:
+        if request.url.path == "/api/v1/simulation":
+            # 不回显未经验证的数值：JSON 大指数可被解码为 inf，不能再次写入 JSON 响应。
+            return Response(content=ErrorResponse(detail="推演参数无效，请检查数值范围和节点配置").model_dump_json(),
+                            status_code=422, media_type="application/json")
+        return await request_validation_exception_handler(request, error)
 
     @app.get("/health", response_model=Health)
     def health() -> Health:

@@ -80,3 +80,9 @@ def test_one_minute_stay_never_produces_negative_population(client: TestClient) 
     result = ScenarioResult.model_validate_json(response.text)
     assert [point.guided[0].people for point in result.series] == [100, 0, 0]
     assert [point.guided[1].people for point in result.series] == [0, 10, 10]
+
+
+def test_numeric_overflow_is_a_validation_error_not_a_server_failure(client: TestClient) -> None:
+    payload = EXAMPLE.replace('"arrivals_per_minute":10', '"arrivals_per_minute":1e309')
+    response = client.post("/api/v1/simulation", content=payload, headers=operator())
+    assert response.status_code == 422
