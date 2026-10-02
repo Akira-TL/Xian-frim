@@ -53,6 +53,11 @@ class ScenarioResult(Contract):
     series: list[ScenarioPoint]
 
 
+def _step_population(node: ScenarioNode, prior: ScenarioPopulation, arrivals: float) -> ScenarioPopulation:
+    return ScenarioPopulation(site_id=node.site_id,
+                              people=max(0, prior.people + arrivals - prior.people / node.stay_minutes))
+
+
 def simulate(request: ScenarioRequest, now: datetime) -> ScenarioResult:
     nodes = sorted(request.nodes, key=lambda node: node.site_id)
     baseline = [ScenarioPopulation(site_id=node.site_id, people=node.initial_people) for node in nodes]
@@ -61,15 +66,11 @@ def simulate(request: ScenarioRequest, now: datetime) -> ScenarioResult:
     diverted = origin.arrivals_per_minute * request.adoption_ratio
     series = [ScenarioPoint(minute=0, baseline=baseline, guided=guided, diverted_arrivals=0)]
     for minute in range(1, request.duration_minutes + 1):
-        baseline = [ScenarioPopulation(site_id=node.site_id,
-                                       people=max(0, prior.people + node.arrivals_per_minute
-                                                  - prior.people / node.stay_minutes))
+        baseline = [_step_population(node, prior, node.arrivals_per_minute)
                     for node, prior in zip(nodes, baseline)]
-        guided = [ScenarioPopulation(site_id=node.site_id,
-                                     people=max(0, prior.people + node.arrivals_per_minute
-                                                - (diverted if node.site_id == request.from_site else 0)
-                                                + (diverted if node.site_id == request.to_site else 0)
-                                                - prior.people / node.stay_minutes))
+        guided = [_step_population(node, prior, node.arrivals_per_minute
+                                   - (diverted if node.site_id == request.from_site else 0)
+                                   + (diverted if node.site_id == request.to_site else 0))
                   for node, prior in zip(nodes, guided)]
         series.append(ScenarioPoint(minute=minute, baseline=baseline, guided=guided,
                                     diverted_arrivals=diverted))
