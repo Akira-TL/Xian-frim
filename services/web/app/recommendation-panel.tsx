@@ -9,7 +9,7 @@ function time(value: string) { return new Date(value).toLocaleString("zh-CN", { 
 
 export default function RecommendationPanel({ visit, disabled = false }: { visit: Visit; disabled?: boolean }) {
   const [view, setView] = useState<View>();
-  const [notice, setNotice] = useState("点击生成建议；当前 AI 未配置，规则建议会明确标注");
+  const [notice, setNotice] = useState("点击生成建议；模型不可用时，规则建议会明确标注");
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [decision, setDecision] = useState<"accepted" | "rejected">();
@@ -24,6 +24,9 @@ export default function RecommendationPanel({ visit, disabled = false }: { visit
   const result = view?.result;
   const expired = !!view && (view.historyExpired || Date.parse(view.result.input.expires_at) <= now);
   const candidate = result?.input.candidates.find(item => item.site.site_id === result.selected_site);
+  const originLabel = result?.source === "model" ? "模型建议（输出校验通过）"
+    : result?.source === "rule_fallback" ? result.fallback_reason === "invalid_output"
+      ? "规则建议（模型输出校验失败）" : "规则建议（AI 未配置）" : "无有效候选";
   const mayChoose = !!candidate && !view?.historical && !expired && !busy && !disabled;
 
   async function request(historical: boolean) {
@@ -70,7 +73,7 @@ export default function RecommendationPanel({ visit, disabled = false }: { visit
     <p role="status" aria-live="polite" className="mt-3 text-sm">{notice}</p>
     {result && <div className="mt-4 space-y-3">
       <div className={`rounded-lg p-3 ${expired || view?.historical ? "bg-amber-100" : "bg-stone-100"}`}>
-        <p className="font-semibold">{view?.historical ? "历史记录 · 原结果：" : "本次结果："}{result.source === "rule_fallback" ? "规则建议（AI 未配置）" : "无有效候选"}</p>
+        <p className="font-semibold">{view?.historical ? "历史记录 · 原结果：" : "本次结果："}{originLabel}</p>
         {view?.historical && <p>不是本次实时 AI 输出；历史回读不延长有效期。</p>}
         {expired && <p>快照已失效，不能作为当前建议；请重新生成。</p>}
         <p className="mt-2 text-xs">生成：{time(result.input.generated_at)} · 失效：{time(result.input.expires_at)}</p>

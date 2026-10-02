@@ -1,10 +1,10 @@
 """基于已记录到访的推荐约束；规则建议不冒充模型输出。"""
 
 from datetime import datetime, timedelta
-from typing import Annotated, Literal
+from typing import Annotated, Callable, Literal, Protocol
 from uuid import uuid4
 
-from pydantic import Field
+from pydantic import Field, ValidationError, field_validator
 
 from .catalog import SiteCatalog, SiteDefinition
 from .models import Contract, CommandId, Identifier, SiteId, SiteStatistics, Source
@@ -39,12 +39,30 @@ class RecommendationInput(Contract):
 
 class RecommendationResult(Contract):
     snapshot_id: Identifier
-    source: Literal["rule_fallback", "none"]
-    fallback_reason: Literal["not_configured", "no_candidates"]
+    source: Literal["model", "rule_fallback", "none"]
+    fallback_reason: Literal["not_configured", "no_candidates", "invalid_output"] | None
     selected_site: SiteId | None
     child_text: Annotated[str, Field(max_length=200)]
     operator_reason: Annotated[str, Field(max_length=500)]
     input: RecommendationInput
+
+
+class ModelOutput(Contract):
+    snapshot_id: Identifier
+    selected_site: SiteId
+    child_text: Annotated[str, Field(min_length=1, max_length=200)]
+    operator_reason: Annotated[str, Field(min_length=1, max_length=500)]
+
+    @field_validator("child_text", "operator_reason")
+    @classmethod
+    def nonblank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("模型文案不能为空白")
+        return value
+
+
+class RecommendationModel(Protocol):
+    async def recommend(self, snapshot: RecommendationInput) -> str: ...
 
 
 class RecommendationRecord(Contract):
@@ -55,12 +73,30 @@ class RecommendationRecord(Contract):
 
 
 class RecommendationService:
-    def __init__(self, repository: Repository, catalog: SiteCatalog) -> None:
+    def __init__(self, repository: Repository, catalog: SiteCatalog,
+                 model: RecommendationModel | None = None) -> None:
         self.repository = repository
         self.catalog = catalog
+        self.model = model
 
-    def create(self, request: RecommendationRequest, now: datetime) -> RecommendationResult:
-        result = self._generate(request, now)
+    async def create(self, request: RecommendationRequest, clock: Callable[[], datetime]) -> RecommendationResult:
+        result = self._generate(request, clock())
+        if self.model is not None and result.input.candidates:
+            snapshot = RecommendationInput.model_validate_json(result.input.model_dump_json())
+            raw = await self.model.recommend(snapshot)
+            try:
+                if len(raw) > 4096:
+                    raise ValueError("模型结果超长")
+                output = ModelOutput.model_validate_json(raw)
+                if (output.snapshot_id != result.snapshot_id or not any(
+                        candidate.site.site_id == output.selected_site for candidate in result.input.candidates)):
+                    raise ValueError("模型快照或候选不匹配")
+            except (ValidationError, ValueError):
+                result = self._rule(result.input, "invalid_output")
+            else:
+                result = RecommendationResult(snapshot_id=result.snapshot_id, source="model", fallback_reason=None,
+                                              selected_site=output.selected_site, child_text=output.child_text,
+                                              operator_reason=output.operator_reason, input=result.input)
         self.repository.save_recommendation(result.snapshot_id, request.badge_id, request.event_id,
                                              result.model_dump_json())
         return result
@@ -109,16 +145,21 @@ class RecommendationService:
             selected_visit_site=event.site_id, visited_sites=visited,
             completed_games=completed, progress_verified_at=verified_at, candidates=candidates,
         )
-        if candidates:
-            selected = min(candidates, key=lambda candidate: (candidate.visited,
+        return self._rule(snapshot, "not_configured")
+
+    @staticmethod
+    def _rule(snapshot: RecommendationInput, reason: Literal["not_configured", "invalid_output"]) -> RecommendationResult:
+        if snapshot.candidates:
+            selected = min(snapshot.candidates, key=lambda candidate: (candidate.visited,
                             candidate.statistics.recent_unique_badges, candidate.site.site_id))
-            reason = ("AI 未配置；这是演示规则建议，优先尚未到访、近期打卡较少的有效候选。"
-                      f"{selected.site.name} 最近五分钟 {selected.statistics.recent_unique_badges} 枚腰牌。")
+            prefix = "AI 未配置" if reason == "not_configured" else "AI 输出校验失败"
+            explanation = (f"{prefix}；这是演示规则建议，优先尚未到访、近期打卡较少的有效候选。"
+                           f"{selected.site.name} 最近五分钟 {selected.statistics.recent_unique_badges} 枚腰牌。")
             if not selected.site.game_available:
-                reason += "该点小游戏尚未接入，只有地图与内容示意。"
+                explanation += "该点小游戏尚未接入，只有地图与内容示意。"
             return RecommendationResult(snapshot_id=snapshot.snapshot_id, source="rule_fallback",
-                                        fallback_reason="not_configured", selected_site=selected.site.site_id,
-                                        child_text=f"下一站去{selected.site.name}看看吧。", operator_reason=reason, input=snapshot)
+                                        fallback_reason=reason, selected_site=selected.site.site_id,
+                                        child_text=f"下一站去{selected.site.name}看看吧。", operator_reason=explanation, input=snapshot)
         return RecommendationResult(snapshot_id=snapshot.snapshot_id, source="none", fallback_reason="no_candidates",
                                     selected_site=None, child_text="", operator_reason="暂无开放、可达且数据新鲜的下一站",
                                     input=snapshot)

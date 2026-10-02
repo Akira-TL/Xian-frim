@@ -22,19 +22,20 @@ from .device_protocol import DeviceEnvelope, DeviceKey, DeviceKeys, DeviceReport
 from .device_service import DeviceService
 from .simulation import ScenarioRequest, ScenarioResult, simulate
 from .catalog import SiteCatalog, default_catalog
-from .recommendations import RecommendationRecord, RecommendationRequest, RecommendationResult, RecommendationService
+from .recommendations import RecommendationModel, RecommendationRecord, RecommendationRequest, RecommendationResult, RecommendationService
 
 
 def create_app(db_path: Path, operator_token: str, terminal_token: str,
                clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
-               device_keys: tuple[DeviceKey, ...] = (), site_catalog: SiteCatalog | None = None) -> FastAPI:
+               device_keys: tuple[DeviceKey, ...] = (), site_catalog: SiteCatalog | None = None,
+               recommendation_model: RecommendationModel | None = None) -> FastAPI:
     if (not operator_token or not terminal_token or operator_token == terminal_token
             or not operator_token.isascii() or not terminal_token.isascii()):
         raise ValueError("请配置不同的工作人员和终端访问令牌")
     repository = Repository(db_path)
     devices = DeviceService(repository, device_keys)
     catalog = SiteCatalog.model_validate_json((site_catalog or default_catalog()).model_dump_json())
-    recommendations = RecommendationService(repository, catalog)
+    recommendations = RecommendationService(repository, catalog, recommendation_model)
     app = FastAPI(title="长安游迹接口", version="0.1.0")
 
     def verify(token: str, authorization: str | None) -> None:
@@ -75,8 +76,8 @@ def create_app(db_path: Path, operator_token: str, terminal_token: str,
         return catalog
 
     @app.post("/api/v1/recommendations", dependencies=[Depends(operator)])
-    def recommend(request: RecommendationRequest) -> RecommendationResult:
-        return recommendations.create(request, clock())
+    async def recommend(request: RecommendationRequest) -> RecommendationResult:
+        return await recommendations.create(request, clock)
 
     @app.get("/api/v1/recommendations/{snapshot_id}", dependencies=[Depends(reader)])
     def recommendation_record(snapshot_id: str) -> RecommendationRecord:

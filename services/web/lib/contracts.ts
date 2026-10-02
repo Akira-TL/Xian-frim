@@ -112,13 +112,16 @@ const recommendationInputSchema = z.strictObject({
     && candidate.statistics.site_id === candidate.site.site_id && candidate.statistics.data_status === "fresh"
     && !value.completed_games.some(game => candidate.site.game_id === game)), "推荐输入违反来源或候选约束");
 export const recommendationSchema = z.strictObject({
-  snapshot_id: id, source: z.enum(["rule_fallback", "none"]), fallback_reason: z.enum(["not_configured", "no_candidates"]),
+  snapshot_id: id, source: z.enum(["model", "rule_fallback", "none"]),
+  fallback_reason: z.enum(["not_configured", "no_candidates", "invalid_output"]).nullable(),
   selected_site: siteId.nullable(), child_text: z.string().max(200), operator_reason: z.string().max(500),
   input: recommendationInputSchema,
 }).refine(value => value.snapshot_id === value.input.snapshot_id && (
   value.source === "none"
     ? value.fallback_reason === "no_candidates" && value.selected_site === null && value.child_text === "" && value.input.candidates.length === 0
-    : value.fallback_reason === "not_configured" && value.child_text.length > 0
+    : (value.source === "model" ? value.fallback_reason === null
+        : value.fallback_reason === "not_configured" || value.fallback_reason === "invalid_output")
+      && value.child_text.trim().length > 0 && value.operator_reason.trim().length > 0
       && value.input.candidates.some(candidate => candidate.site.site_id === value.selected_site)
 ), "推荐结果不属于输入候选或来源标记错误");
 export const recommendationRecordSchema = z.strictObject({
