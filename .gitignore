@@ -32,6 +32,21 @@ dist/
 build/
 *.egg-info/
 
+# ESP-IDF
+build-*/
+managed_components/
+sdkconfig
+sdkconfig.old
+dependencies.lock
+releases/
+main/assets/lang_config.h
+main/mmap_generate_emoji.h
+mmap_generate_*.h
+*.bin
+*.elf
+*.map
+*.uf2
+
 # Node.js / 前端
 node_modules/
 .next/
