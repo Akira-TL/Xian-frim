@@ -1,0 +1,17 @@
+[project]
+name = "changan-badge-backend"
+version = "0.1.0"
+description = "长安游迹到访与设备控制服务"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115,<1",
+    "pydantic>=2.10,<3",
+    "uvicorn>=0.34,<1",
+]
+
+[dependency-groups]
+dev = ["httpx>=0.28,<1", "pytest>=8,<10"]
+
+[tool.pytest.ini_options]
+pythonpath = ["services/backend"]
+testpaths = ["tests/backend"]

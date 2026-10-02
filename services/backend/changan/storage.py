@@ -1,0 +1,174 @@
+"""到访与解锁的事务边界。"""
+
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+from hashlib import sha256
+from pathlib import Path
+import sqlite3
+
+from .models import (
+    BadgeRegistration, ScanRequest, ScanResponse, Source, TerminalConfiguration,
+    UnlockCommand, UnlockRequest, Visit,
+)
+
+
+class BusinessError(Exception):
+    def __init__(self, status: int, detail: str) -> None:
+        super().__init__(detail)
+        self.status = status
+        self.detail = detail
+
+
+class Repository:
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with self.connection() as db:
+            db.executescript(Path(__file__).with_name("schema.sql").read_text())
+
+    @contextmanager
+    def connection(self, *, write: bool = False) -> Iterator[sqlite3.Connection]:
+        db = sqlite3.connect(self.path, timeout=10)
+        db.row_factory = sqlite3.Row
+        db.execute("PRAGMA foreign_keys = ON")
+        try:
+            if write:
+                db.execute("BEGIN IMMEDIATE")
+            yield db
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    def register(self, badge: BadgeRegistration) -> BadgeRegistration:
+        with self.connection(write=True) as db:
+            row = db.execute("SELECT * FROM badges WHERE badge_id = ?", (badge.badge_id,)).fetchone()
+            if row:
+                if (row["device_id"], row["display_number"]) != (badge.device_id, badge.display_number):
+                    raise BusinessError(409, "腰牌已登记为另一设备或编号")
+            else:
+                try:
+                    db.execute("INSERT INTO badges VALUES (?, ?, ?)",
+                               (badge.badge_id, badge.display_number, badge.device_id))
+                except sqlite3.IntegrityError as error:
+                    raise BusinessError(409, "该实物设备已经绑定其他腰牌") from error
+        return badge
+
+    @staticmethod
+    def visit(row: sqlite3.Row) -> Visit:
+        return Visit(
+            event_id=row["event_id"], session_id=row["session_id"], badge_id=row["badge_id"],
+            terminal_id=row["terminal_id"], site_id=row["site_id"], config_version=row["config_version"],
+            captured_at=row["captured_at"], received_at=row["received_at"],
+            time_quality=row["time_quality"], source=row["source"],
+        )
+
+    @staticmethod
+    def scan_response(visit: Visit, duplicate: bool) -> ScanResponse:
+        return ScanResponse(visit=visit, duplicate=duplicate,
+                            can_unlock=visit.source == Source.PHYSICAL and visit.site_id == "A")
+
+    def scan(self, request: ScanRequest, now: datetime, source: Source = Source.PHYSICAL) -> ScanResponse:
+        payload_hash = sha256((source + request.model_dump_json()).encode()).hexdigest()
+        captured = request.captured_at.astimezone(timezone.utc)
+        with self.connection(write=True) as db:
+            receipt = db.execute("SELECT * FROM scan_receipts WHERE event_id = ?", (request.event_id,)).fetchone()
+            if receipt:
+                if receipt["payload_hash"] != payload_hash:
+                    raise BusinessError(409, "事件编号已被不同内容使用")
+                visit = db.execute("SELECT * FROM visits WHERE event_id = ?", (receipt["visit_id"],)).fetchone()
+                return self.scan_response(self.visit(visit), True)
+            if not db.execute("SELECT 1 FROM badges WHERE badge_id = ?", (request.badge_id,)).fetchone():
+                raise BusinessError(404, "腰牌未登记")
+            config = db.execute(
+                "SELECT site_id FROM terminal_configs WHERE terminal_id = ? AND config_version = ?",
+                (request.terminal_id, request.config_version),
+            ).fetchone()
+            if not config or config["site_id"] != request.site_id:
+                raise BusinessError(409, "终端地点与配置版本不匹配")
+            if request.time_quality == "synced" and captured > now + timedelta(seconds=30):
+                raise BusinessError(422, "采集时间超出允许的时钟偏差")
+            dedup_at = (captured if request.time_quality == "synced" else now).timestamp()
+            existing = db.execute(
+                "SELECT * FROM visits WHERE session_id=? AND badge_id=? AND site_id=? AND source=? "
+                "AND dedup_at BETWEEN ? AND ? ORDER BY dedup_at, event_id LIMIT 1",
+                (request.session_id, request.badge_id, request.site_id, source, dedup_at - 60, dedup_at + 60),
+            ).fetchone()
+            visit_id = existing["event_id"] if existing else request.event_id
+            if not existing:
+                db.execute(
+                    "INSERT INTO visits VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (visit_id, request.session_id, request.badge_id, request.terminal_id,
+                     request.site_id, request.config_version, captured.isoformat(), now.isoformat(),
+                     request.time_quality, source, dedup_at),
+                )
+            db.execute("INSERT INTO scan_receipts VALUES (?, ?, ?)",
+                       (request.event_id, payload_hash, visit_id))
+            row = existing or db.execute("SELECT * FROM visits WHERE event_id = ?", (visit_id,)).fetchone()
+            return self.scan_response(self.visit(row), existing is not None)
+
+    def visits(self) -> list[Visit]:
+        with self.connection() as db:
+            return [self.visit(row) for row in db.execute("SELECT * FROM visits ORDER BY received_at DESC, event_id")]
+
+    def configuration(self) -> TerminalConfiguration:
+        with self.connection() as db:
+            row = db.execute("SELECT * FROM terminal_configs ORDER BY config_version DESC LIMIT 1").fetchone()
+            return TerminalConfiguration(site_id=row["site_id"], config_version=row["config_version"])
+
+    def select_site(self, site_id: str) -> TerminalConfiguration:
+        with self.connection(write=True) as db:
+            row = db.execute("SELECT * FROM terminal_configs ORDER BY config_version DESC LIMIT 1").fetchone()
+            version = row["config_version"]
+            if row["site_id"] != site_id:
+                version += 1
+                db.execute("INSERT INTO terminal_configs VALUES ('k230-001', ?, ?)", (version, site_id))
+            return TerminalConfiguration(site_id=site_id, config_version=version)
+
+    @staticmethod
+    def command(row: sqlite3.Row) -> UnlockCommand:
+        return UnlockCommand(
+            command_id=row["command_id"], event_id=row["event_id"], session_id="demo-001",
+            badge_id=row["badge_id"], device_id=row["device_id"], created_at=row["created_at"],
+            expires_at=row["expires_at"], status=row["status"],
+        )
+
+    def unlock(self, request: UnlockRequest, now: datetime) -> UnlockCommand:
+        with self.connection(write=True) as db:
+            visit = db.execute("SELECT * FROM visits WHERE event_id = ?", (request.event_id,)).fetchone()
+            badge = db.execute("SELECT * FROM badges WHERE badge_id = ?", (request.badge_id,)).fetchone()
+            if not visit or not badge:
+                raise BusinessError(404, "到访或腰牌不存在")
+            if visit["badge_id"] != request.badge_id or badge["device_id"] != request.device_id:
+                raise BusinessError(409, "到访、腰牌与实物设备身份不一致")
+            if visit["source"] != Source.PHYSICAL:
+                raise BusinessError(403, "模拟数据不能控制实物腰牌")
+            if visit["site_id"] != "A":
+                raise BusinessError(409, "该地点游戏尚未实现")
+            existing_id = db.execute("SELECT * FROM commands WHERE command_id = ?", (request.command_id,)).fetchone()
+            if existing_id and existing_id["event_id"] != request.event_id:
+                raise BusinessError(409, "请求编号已关联其他到访")
+            existing = existing_id or db.execute("SELECT * FROM commands WHERE event_id = ?", (request.event_id,)).fetchone()
+            if existing:
+                return self.command(existing)
+            db.execute("INSERT INTO commands VALUES (?, ?, ?, ?, ?, ?, 'pending')",
+                       (request.command_id, request.event_id, request.badge_id, request.device_id,
+                        now.isoformat(), (now + timedelta(minutes=5)).isoformat()))
+            row = db.execute("SELECT * FROM commands WHERE command_id = ?", (request.command_id,)).fetchone()
+            return self.command(row)
+
+    def mark_sent(self, command_id: str, device_id: str, now: datetime) -> UnlockCommand:
+        with self.connection(write=True) as db:
+            row = db.execute("SELECT * FROM commands WHERE command_id = ?", (command_id,)).fetchone()
+            if not row:
+                raise BusinessError(404, "解锁请求不存在")
+            if row["device_id"] != device_id:
+                raise BusinessError(409, "设备身份不匹配")
+            if datetime.fromisoformat(row["expires_at"]) <= now and row["status"] != "confirmed":
+                raise BusinessError(409, "解锁请求已过期，请先读取设备状态")
+            if row["status"] == "pending":
+                db.execute("UPDATE commands SET status='sent' WHERE command_id=?", (command_id,))
+            return self.command(db.execute("SELECT * FROM commands WHERE command_id=?", (command_id,)).fetchone())
