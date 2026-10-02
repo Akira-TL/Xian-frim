@@ -249,6 +249,7 @@ static int gap_event_handler(struct ble_gap_event *event, void *arg)
 
     /* Disconnect event */
     case BLE_GAP_EVENT_DISCONNECT:
+        doit_ble_disconnected(event->disconnect.conn.conn_handle);
         /* A connection was terminated, print connection descriptor */
         ESP_LOGI(TAG,"disconnected from peer; reason=%d",
                 event->disconnect.reason);

@@ -25,6 +25,7 @@ static void nimble_host_task(void *param);
 
 static doit_ble_ready_cb_t ble_ready_cb = NULL;
 static doit_ble_gatt_cb_t extra_gatt_cb = NULL;
+static doit_ble_disconnect_cb_t disconnect_cb = NULL;
 
 /* Private functions */
 /*
@@ -34,6 +35,7 @@ static doit_ble_gatt_cb_t extra_gatt_cb = NULL;
  */
 static void on_stack_reset(int reason)
 {
+    doit_ble_disconnected(UINT16_MAX);
     /* On reset, print reset reason to console */
     ESP_LOGI(TAG,"nimble stack reset, reset reason: %d", reason);
 }
@@ -80,6 +82,16 @@ void doit_ble_ready_cb_register(doit_ble_ready_cb_t cb)
 void doit_ble_gatt_cb_register(doit_ble_gatt_cb_t cb)
 {
     extra_gatt_cb = cb;
+}
+
+void doit_ble_disconnect_cb_register(doit_ble_disconnect_cb_t cb)
+{
+    disconnect_cb = cb;
+}
+
+void doit_ble_disconnected(uint16_t connection)
+{
+    if (disconnect_cb) disconnect_cb(connection);
 }
 
 void min_program_ble_start(void)

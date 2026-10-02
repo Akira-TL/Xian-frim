@@ -200,6 +200,9 @@ if(NOT CONFIG_ASSETS_FIX_PATH STREQUAL "")
 endif()
 
 # Several feature groups are collected with GLOBs; make the final source list deterministic.
+if(EXISTS "${PROJECT_DIR}/data/generated/changan_device_key.h")
+    list(APPEND INCLUDE_DIRS "${PROJECT_DIR}/data/generated")
+endif()
 list(REMOVE_DUPLICATES SOURCES)
 list(REMOVE_DUPLICATES INCLUDE_DIRS)
 
