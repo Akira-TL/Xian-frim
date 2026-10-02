@@ -59,3 +59,25 @@ export const activitySchema = z.strictObject({ map: mapSchema, progress: progres
     "模拟来源不能包含实物游戏进度");
 export type ActivitySnapshot = z.infer<typeof activitySchema>;
 export type DataSource = z.infer<typeof sourceSchema>;
+
+export const scenarioRequestSchema = z.strictObject({
+  nodes: z.array(z.strictObject({
+    site_id: siteId, initial_people: z.number().min(0).max(10000),
+    arrivals_per_minute: z.number().min(0).max(1000), stay_minutes: z.number().min(1).max(240),
+  })).length(3),
+  from_site: siteId, to_site: siteId, adoption_ratio: z.number().min(0).max(1),
+  duration_minutes: z.number().int().min(1).max(120),
+}).refine(value => new Set(value.nodes.map(node => node.site_id)).size === 3
+  && value.from_site !== value.to_site, "节点必须各提供一次，且分流目标不同");
+const populationSchema = z.array(z.strictObject({ site_id: siteId, people: z.number().nonnegative() }))
+  .length(3).refine(value => new Set(value.map(node => node.site_id)).size === 3, "推演节点不完整");
+export const scenarioSchema = z.strictObject({
+  source: z.literal("scenario_simulation"), generated_at: date, step_minutes: z.literal(1),
+  departure_rule: z.literal("previous_people / stay_minutes"),
+  metric_label: z.literal("假设估计人数；情景推演；非现场观测"), parameters: scenarioRequestSchema,
+  series: z.array(z.strictObject({ minute: count, baseline: populationSchema, guided: populationSchema,
+    diverted_arrivals: z.number().nonnegative() })).min(2).max(121),
+}).refine(value => value.series.length === value.parameters.duration_minutes + 1
+  && value.series.every((point, index) => point.minute === index), "推演时间步不连续");
+export type ScenarioRequest = z.infer<typeof scenarioRequestSchema>;
+export type ScenarioResult = z.infer<typeof scenarioSchema>;

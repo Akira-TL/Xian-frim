@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { activitySchema, badgeSchema, commandSchema, envelopeSchema, stateSchema, visitSchema, type Badge, type DataSource } from "./contracts.ts";
+import { activitySchema, badgeSchema, commandSchema, envelopeSchema, stateSchema, visitSchema, scenarioSchema, type Badge, type DataSource, type ScenarioRequest } from "./contracts.ts";
 
 type UnlockRequest = { command_id: string; event_id: string; badge_id: string; device_id: string };
-type RequestBody = Badge | UnlockRequest | { nonce: string } | { device_id: string } | { challenge: string; payload_hex: string };
+type RequestBody = Badge | UnlockRequest | ScenarioRequest | { nonce: string } | { device_id: string } | { challenge: string; payload_hex: string };
 
 export function createApi(base = "/api/v1") {
   async function request<T>(path: string, schema: z.ZodType<T>, body?: RequestBody, method = body === undefined ? "GET" : "POST"): Promise<T> {
@@ -21,6 +21,7 @@ export function createApi(base = "/api/v1") {
   }
   const badgePath = (badge: string) => `badges/${encodeURIComponent(badge)}`;
   return {
+    simulate: (input: ScenarioRequest) => request("simulation", scenarioSchema, input),
     activity: (source: DataSource) => request(`activity?source=${encodeURIComponent(source)}`, activitySchema),
     badges: () => request("badges", z.array(badgeSchema)),
     visits: () => request("visits", z.array(visitSchema)),

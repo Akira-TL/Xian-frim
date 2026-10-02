@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createApi } from "../lib/api.ts";
+import { scenarioSchema } from "../lib/contracts.ts";
 
 const web = process.env.CHANGAN_TEST_WEB_ORIGIN;
 assert.ok(web, "通过 scripts/web/test-gateway.sh 启动隔离服务后执行");
@@ -24,6 +25,21 @@ test("免登录活动查询保留空数据与模拟来源边界", async () => {
   assert.equal(generated.status, 200);
   assert.equal((await createApi(`${web}/api/v1`).activity("generated_simulation")).progress, null);
   assert.equal(physical.headers.get("cache-control"), "no-store");
+});
+
+test("所有演示参与者均可推演，但推演不制造到访事实", async () => {
+  const response = await fetch(`${web}/api/v1/simulation`, {
+    method: "POST", headers: { "Content-Type": "application/json", Origin: web },
+    body: JSON.stringify({ nodes: [
+      { site_id: "A", initial_people: 100, arrivals_per_minute: 10, stay_minutes: 10 },
+      { site_id: "B", initial_people: 0, arrivals_per_minute: 0, stay_minutes: 10 },
+      { site_id: "C", initial_people: 0, arrivals_per_minute: 0, stay_minutes: 10 },
+    ], from_site: "A", to_site: "B", adoption_ratio: 1, duration_minutes: 2 }),
+  });
+  assert.equal(response.status, 200);
+  const result = scenarioSchema.parse(await response.json() as unknown);
+  assert.deepEqual(result.series[2].guided.map(node => node.people), [81, 19, 0]);
+  assert.equal(await (await fetch(`${web}/api/v1/visits`)).text(), "[]");
 });
 
 test("演示参与者能登记腰牌，但不能冒充终端制造实物到访", async () => {

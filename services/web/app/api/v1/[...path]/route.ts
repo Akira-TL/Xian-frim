@@ -8,7 +8,7 @@ const readable = [
   new RegExp(`^badges/${identifier}/progress$`),
 ];
 const writable = [
-  /^badges$/, /^unlock-commands$/, /^device-reports$/, /^demo\/visits$/,
+  /^badges$/, /^unlock-commands$/, /^device-reports$/, /^demo\/visits$/, /^simulation$/,
   new RegExp(`^unlock-commands/${identifier}/sent$`),
   new RegExp(`^badges/${identifier}/state-challenges$`),
   new RegExp(`^badges/${identifier}/unlock-commands/${identifier}/authorize$`),
