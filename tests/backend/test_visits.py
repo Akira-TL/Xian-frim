@@ -151,6 +151,8 @@ def test_non_ascii_authorization_is_rejected_without_server_error(client: TestCl
     # HTTP 字段可携带单字节扩展字符；无效令牌应返回 401 而不是抛出异常。
     response = client.get("/api/v1/visits", headers=[("Authorization", b"Bearer \xff")])
     assert response.status_code == 401
+
+
 def test_staff_reads_request_status_without_confirming_execution(client: TestClient) -> None:
     register(client)
     post_scan(client, scan())
@@ -170,5 +172,3 @@ def test_staff_reads_request_status_without_confirming_execution(client: TestCli
     assert client.get("/api/v1/badges/badge-001/progress", headers=operator()).status_code == 404
     assert client.get("/api/v1/unlock-commands", headers=terminal()).status_code == 401
     assert client.get("/api/v1/unlock-commands").status_code == 401
-
-
