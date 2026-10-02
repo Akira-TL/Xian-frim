@@ -95,3 +95,35 @@ export const siteCatalogSchema = z.strictObject({
   sites: z.array(siteDefinitionSchema).length(3),
 }).refine(value => new Set(value.sites.map(site => site.site_id)).size === 3, "节点配置不完整");
 export type SiteCatalog = z.infer<typeof siteCatalogSchema>;
+
+export const recommendationRequestSchema = z.strictObject({ badge_id: id, event_id: commandId });
+const recommendationInputSchema = z.strictObject({
+  snapshot_id: id, session_id: z.literal("demo-001"), data_source: sourceSchema,
+  generated_at: date, expires_at: date, catalog_version: z.number().int().positive(), selected_visit_site: siteId,
+  visited_sites: z.array(siteId).max(3), completed_games: z.array(z.literal("qin_formation")).max(1),
+  progress_verified_at: date.nullable(), candidates: z.array(z.strictObject({
+    site: siteDefinitionSchema, statistics: siteStatisticsSchema, visited: z.boolean(),
+  })).max(2),
+}).refine(value => new Set(value.visited_sites).size === value.visited_sites.length
+  && new Set(value.candidates.map(candidate => candidate.site.site_id)).size === value.candidates.length
+  && Date.parse(value.generated_at) < Date.parse(value.expires_at)
+  && (value.data_source !== "generated_simulation" || (value.completed_games.length === 0 && value.progress_verified_at === null))
+  && value.candidates.every(candidate => candidate.site.is_open && candidate.site.site_id !== value.selected_visit_site
+    && candidate.statistics.site_id === candidate.site.site_id && candidate.statistics.data_status === "fresh"
+    && !value.completed_games.some(game => candidate.site.game_id === game)), "推荐输入违反来源或候选约束");
+export const recommendationSchema = z.strictObject({
+  snapshot_id: id, source: z.enum(["rule_fallback", "none"]), fallback_reason: z.enum(["not_configured", "no_candidates"]),
+  selected_site: siteId.nullable(), child_text: z.string().max(200), operator_reason: z.string().max(500),
+  input: recommendationInputSchema,
+}).refine(value => value.snapshot_id === value.input.snapshot_id && (
+  value.source === "none"
+    ? value.fallback_reason === "no_candidates" && value.selected_site === null && value.child_text === "" && value.input.candidates.length === 0
+    : value.fallback_reason === "not_configured" && value.child_text.length > 0
+      && value.input.candidates.some(candidate => candidate.site.site_id === value.selected_site)
+), "推荐结果不属于输入候选或来源标记错误");
+export const recommendationRecordSchema = z.strictObject({
+  delivery: z.literal("historical"), retrieved_at: date, expired: z.boolean(), result: recommendationSchema,
+});
+export type RecommendationRequest = z.infer<typeof recommendationRequestSchema>;
+export type RecommendationResult = z.infer<typeof recommendationSchema>;
+export type RecommendationRecord = z.infer<typeof recommendationRecordSchema>;

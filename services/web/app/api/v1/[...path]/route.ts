@@ -6,9 +6,10 @@ const identifier = "[A-Za-z0-9_-]+";
 const readable = [
   /^badges$/, /^visits$/, /^unlock-commands$/, /^map$/, /^activity$/, /^sites$/,
   new RegExp(`^badges/${identifier}/progress$`),
+  new RegExp(`^recommendations/${identifier}$`),
 ];
 const writable = [
-  /^badges$/, /^unlock-commands$/, /^device-reports$/, /^demo\/visits$/, /^simulation$/,
+  /^badges$/, /^unlock-commands$/, /^device-reports$/, /^demo\/visits$/, /^simulation$/, /^recommendations$/,
   new RegExp(`^unlock-commands/${identifier}/sent$`),
   new RegExp(`^badges/${identifier}/state-challenges$`),
   new RegExp(`^badges/${identifier}/unlock-commands/${identifier}/authorize$`),

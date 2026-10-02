@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { activitySchema, badgeSchema, commandSchema, envelopeSchema, stateSchema, visitSchema, scenarioSchema, siteCatalogSchema, type Badge, type DataSource, type ScenarioRequest } from "./contracts.ts";
+import { activitySchema, badgeSchema, commandSchema, envelopeSchema, stateSchema, visitSchema, scenarioSchema, siteCatalogSchema, recommendationSchema, recommendationRecordSchema, type Badge, type DataSource, type ScenarioRequest, type RecommendationRequest } from "./contracts.ts";
 
 type UnlockRequest = { command_id: string; event_id: string; badge_id: string; device_id: string };
-type RequestBody = Badge | UnlockRequest | ScenarioRequest | { nonce: string } | { device_id: string } | { challenge: string; payload_hex: string };
+type RequestBody = Badge | UnlockRequest | ScenarioRequest | RecommendationRequest | { nonce: string } | { device_id: string } | { challenge: string; payload_hex: string };
 
 export function createApi(base = "/api/v1") {
   async function request<T>(path: string, schema: z.ZodType<T>, body?: RequestBody, method = body === undefined ? "GET" : "POST"): Promise<T> {
@@ -21,6 +21,8 @@ export function createApi(base = "/api/v1") {
   }
   const badgePath = (badge: string) => `badges/${encodeURIComponent(badge)}`;
   return {
+    recommend: (input: RecommendationRequest) => request("recommendations", recommendationSchema, input),
+    recommendationRecord: (snapshot: string) => request(`recommendations/${encodeURIComponent(snapshot)}`, recommendationRecordSchema),
     sites: () => request("sites", siteCatalogSchema),
     simulate: (input: ScenarioRequest) => request("simulation", scenarioSchema, input),
     activity: (source: DataSource) => request(`activity?source=${encodeURIComponent(source)}`, activitySchema),

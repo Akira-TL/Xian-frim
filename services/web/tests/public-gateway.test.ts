@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createApi } from "../lib/api.ts";
-import { scenarioSchema } from "../lib/contracts.ts";
+import { scenarioSchema, recommendationSchema } from "../lib/contracts.ts";
 
 const web = process.env.CHANGAN_TEST_WEB_ORIGIN;
 assert.ok(web, "通过 scripts/web/test-gateway.sh 启动隔离服务后执行");
@@ -93,4 +93,36 @@ test("免登录节点配置仍明确未实现小游戏与示意地图", async ()
   assert.ok(text.includes('"geographic_map":false'));
   const catalog = await createApi(`${web}/api/v1`).sites();
   assert.deepEqual(catalog.sites.map(site => site.game_available), [true, false, false]);
+});
+
+test("免登录推荐及历史查询不冒充实时模型或制造实物进度", async () => {
+  const registered = await fetch(`${web}/api/v1/badges`, {
+    method: "POST", headers: { "Content-Type": "application/json", Origin: web },
+    body: JSON.stringify({ badge_id: "recommend-test", display_number: "R01", device_id: "esp32s3-010203040506" }),
+  });
+  assert.equal(registered.status, 200);
+  const visit = await fetch(`${web}/api/v1/demo/visits`, {
+    method: "POST", headers: { "Content-Type": "application/json", Origin: web },
+    body: JSON.stringify({ event_id: "recommend-A", session_id: "demo-001", badge_id: "recommend-test",
+      terminal_id: "k230-001", site_id: "A", config_version: 1,
+      captured_at: new Date().toISOString(), time_quality: "synced" }),
+  });
+  assert.equal(visit.status, 200);
+  const recommended = await fetch(`${web}/api/v1/recommendations`, {
+    method: "POST", headers: { "Content-Type": "application/json", Origin: web },
+    body: JSON.stringify({ badge_id: "recommend-test", event_id: "recommend-A" }),
+  });
+  assert.equal(recommended.status, 200);
+  const result = recommendationSchema.parse(await recommended.json() as unknown);
+  assert.equal(result.source, "none");
+  assert.equal(result.selected_site, null);
+  assert.equal(result.input.data_source, "generated_simulation");
+  const history = await createApi(`${web}/api/v1`).recommendationRecord(result.snapshot_id);
+  assert.equal(history.delivery, "historical");
+  assert.deepEqual(history.result, result);
+  assert.equal((await fetch(`${web}/api/v1/badges/recommend-test/progress`)).status, 404);
+  const foreign = await fetch(`${web}/api/v1/recommendations`, {
+    method: "POST", headers: { "Content-Type": "application/json", Origin: "https://foreign.invalid" }, body: "{}",
+  });
+  assert.equal(foreign.status, 403);
 });
