@@ -304,7 +304,8 @@ esp_err_t http_event_handler(esp_http_client_event_t *evt)
         {
             int sock_err = esp_http_client_get_errno(evt->client);
             int tls_err = 0, tls_flags = 0;
-            esp_http_client_get_and_clear_last_tls_error(evt->client, &tls_err, &tls_flags);
+            esp_tls_get_and_clear_last_error((esp_tls_error_handle_t)evt->data,
+                                             &tls_err, &tls_flags);
 
             ESP_LOGI(TAG, "errno=%d, tls_err=0x%x, tls_flags=0x%x", sock_err, tls_err, tls_flags);
 
