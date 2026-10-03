@@ -210,7 +210,8 @@ if(NOT CONFIG_ASSETS_FIX_PATH STREQUAL "")
 endif()
 
 # Several feature groups are collected with GLOBs; make the final source list deterministic.
-if(EXISTS "${PROJECT_DIR}/data/generated/changan_device_key.h")
+option(CHANGAN_INCLUDE_DEVICE_KEY "仅私有认证版本嵌入设备密钥；公开比赛版关闭" OFF)
+if(CHANGAN_INCLUDE_DEVICE_KEY AND EXISTS "${PROJECT_DIR}/data/generated/changan_device_key.h")
     list(APPEND INCLUDE_DIRS "${PROJECT_DIR}/data/generated")
 endif()
 list(REMOVE_DUPLICATES SOURCES)
