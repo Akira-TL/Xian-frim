@@ -2,9 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
-import type { RecommendationResult, Visit } from "../lib/contracts";
+import type { DataSource, RecommendationResult, Visit } from "../lib/contracts";
 
 type View = { result: RecommendationResult; historical: boolean; historyExpired: boolean };
+const dataSourceLabels: Record<DataSource, string> = {
+  physical_scan_simulated_site: "实物扫码接口 · 模拟地点",
+  generated_simulation: "生成模拟数据；不具备实物解锁资格",
+  interface_test: "接口联调测试；不计真实到访",
+};
 const fallbackLabels: Record<NonNullable<RecommendationResult["fallback_reason"]>, string> = {
   not_configured: "规则建议（AI 未配置）",
   invalid_output: "规则建议（模型输出校验失败）",
@@ -100,7 +105,7 @@ export default function RecommendationPanel({ visit, disabled = false }: { visit
         ? `本页选择：前往 ${candidate?.site.name}；仍须实际到访后再操作设备。` : "本页选择：不采用，保留原路线。"}</p>}
       <details className="rounded-lg bg-stone-50 p-3"><summary className="cursor-pointer text-sm font-semibold">输入统计与最终依据</summary>
         <div className="mt-3 space-y-2 text-sm">
-          <p>来源：{result.input.data_source === "generated_simulation" ? "生成模拟数据；不具备实物解锁资格" : "实物扫码接口 · 模拟地点"}</p>
+          <p>来源：{dataSourceLabels[result.input.data_source]}</p>
           <p>配置版本：{result.input.catalog_version} · 已到访节点：{result.input.visited_sites.join("、") || "无"}</p>
           <p>已认证完成任务：{result.input.completed_games.length ? "秦俑归阵" : "无已认证完成记录"} · 认证时间：{result.input.progress_verified_at ? time(result.input.progress_verified_at) : "无实物认证记录"}</p>
           <ul>{result.input.candidates.map(item => <li className="mt-2" key={item.site.site_id}>
