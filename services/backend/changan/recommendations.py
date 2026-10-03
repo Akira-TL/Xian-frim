@@ -258,6 +258,9 @@ class RecommendationService:
         if any(re.search(r"当前(?:所在)?位置(?:的|是|为|在)\s*[ABC]", text)
                for text in (output.child_text, output.operator_reason)):
             raise ValueError("到访记录不证明当前位置，不能声明实时定位")
+        if any(re.search(r"不会(?:太)?拥挤|无需排队|不用排队", text)
+               for text in (output.child_text, output.operator_reason)):
+            raise ValueError("节点热度不证明现场拥挤程度或排队时间")
         negative_prefixes = ("不声称", "未声称", "不会声称", "不表示", "未表示", "没有", "暂无", "无", "不能说",
                              "不声称可玩或", "未声称可玩或", "不会声称可玩或")
         if not result.input.completed_games and any(
