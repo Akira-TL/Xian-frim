@@ -2,15 +2,17 @@
 #include "cl_ui.h"
 #include "services/exploration/exploration.h"
 #include "qin_art.h"
+#include "ui_tool.h"
 #include <stdint.h>
 
 LV_FONT_DECLARE(font_puhui_18_4)
 
-typedef enum { VIEW_HOME, VIEW_GAME, VIEW_COLLECTION, VIEW_EXHIBIT } view_t;
+typedef enum { VIEW_HOME, VIEW_GAME, VIEW_COLLECTION, VIEW_EXHIBIT, VIEW_SETTINGS } view_t;
 static struct {
     lv_obj_t *root;
     lv_timer_t *timer;
     view_t view;
+    view_t settings_return;
     qin_progress_t progress;
     qin_puzzle_t puzzle;
     const char *notice;
@@ -112,10 +114,40 @@ static void navigate(lv_event_t *event)
     render();
 }
 
-static void return_settings(lv_event_t *event)
+static void open_settings(lv_event_t *event)
 {
     (void)event;
-    page_change("app_list");
+    pg.settings_return = pg.view;
+    pg.view = VIEW_SETTINGS;
+    render();
+}
+
+static void close_settings(lv_event_t *event)
+{
+    (void)event;
+    // 设置只是暂停界面，不调用 exploration_begin()，保留正在拼的碎片。
+    pg.view = pg.settings_return;
+    render();
+}
+
+static void save_setting(lv_event_t *event)
+{
+    int value = lv_slider_get_value(lv_event_get_target(event));
+    if ((intptr_t)lv_event_get_user_data(event) == 0)
+        ui_tool_set_brightness((uint8_t)value);
+    else
+        ui_tool_set_volume(value);
+}
+
+static void setting_slider(int y, int minimum, int value, intptr_t kind)
+{
+    lv_obj_t *slider = lv_slider_create(pg.root);
+    lv_obj_set_size(slider, 180, 20);
+    lv_obj_set_pos(slider, 90, y);
+    lv_slider_set_range(slider, minimum, 100);
+    lv_slider_set_value(slider, value, LV_ANIM_OFF);
+    // 松手才保存，避免拖动时频繁写入非易失性存储。
+    lv_obj_add_event_cb(slider, save_setting, LV_EVENT_RELEASED, (void *)kind);
 }
 
 static void place_piece(uint8_t piece, uint8_t slot)
@@ -235,9 +267,18 @@ static void render(void)
     pg.drag.object = NULL;
     pg.instruction = NULL;
     lv_obj_clean(pg.root);
+    if (pg.view == VIEW_SETTINGS) {
+        label("游戏设置", 45);
+        label("亮度", 100);
+        setting_slider(145, 10, ui_tool_get_brightness(), 0);
+        label("音量", 190);
+        setting_slider(235, 0, ui_tool_get_volume(), 1);
+        button("返回", 110, 280, 140, close_settings, 0);
+        return;
+    }
     if (exploration_get(&pg.progress, &pg.puzzle, NULL) != ESP_OK) {
         label("进度存储不可用", 130);
-        button("设置", 110, 220, 140, return_settings, 0);
+        button("设置", 110, 220, 140, open_settings, 0);
         return;
     }
     label(pg.view == VIEW_GAME ? "秦俑归阵" : "长安游迹", 45);
@@ -270,7 +311,8 @@ static void render(void)
             }
         }
         pg.instruction = label(pg.notice ? pg.notice : "按住碎片，拖到对应轮廓", 244);
-        button("退出", 110, 280, 140, navigate, VIEW_HOME);
+        button("退出", 70, 280, 106, navigate, VIEW_HOME);
+        button("设置", 184, 280, 106, open_settings, 0);
     } else if (pg.view == VIEW_COLLECTION || pg.view == VIEW_EXHIBIT) {
         if (pg.progress.collected) {
             lv_obj_t *art = button(NULL, 80, 80, 200, navigate, VIEW_COLLECTION);
@@ -301,7 +343,7 @@ static void render(void)
         lv_obj_t *play = button(pg.progress.completed ? "重玩秦俑归阵" : "开始秦俑归阵", 70, 148, 220, navigate, VIEW_GAME);
         if (!pg.progress.unlocked) lv_obj_add_state(play, LV_STATE_DISABLED);
         button("收藏", 70, 214, 106, navigate, VIEW_COLLECTION);
-        button("设置", 184, 214, 106, return_settings, 0);
+        button("设置", 184, 214, 106, open_settings, 0);
         if (pg.progress.exhibiting)
             button("展示", 110, 280, 140, navigate, VIEW_EXHIBIT);
     }
@@ -311,7 +353,7 @@ static void poll(lv_timer_t *timer)
 {
     (void)timer;
     // 定时提示及远程进度不能在拖动中删掉手指正在操作的对象。
-    if (pg.drag.object) return;
+    if (pg.drag.object || pg.view == VIEW_SETTINGS) return;
     if (pg.hint_until && (int32_t)(lv_tick_get() - pg.hint_until) >= 0) {
         pg.hint_until = 0;
         render();
