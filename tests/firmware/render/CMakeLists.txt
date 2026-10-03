@@ -24,6 +24,7 @@ set(CONFIG_LV_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(CONFIG_LV_USE_THORVG_INTERNAL OFF CACHE BOOL "" FORCE)
 add_subdirectory("${PROJECT_ROOT}/managed_components/lvgl__lvgl" lvgl)
 add_executable(qin_render_test qin_render_test.c
+    "${PROJECT_ROOT}/main/display/page/exploration/qin_slot.c"
     "${PROJECT_ROOT}/main/display/page/exploration/qin_art.c")
 foreach(NAME head body legs reward)
     target_sources(qin_render_test PRIVATE "${FIRMWARE_BUILD_DIR}/qin-assets/qin_${NAME}.c")

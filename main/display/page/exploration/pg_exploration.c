@@ -2,6 +2,7 @@
 #include "cl_ui.h"
 #include "services/exploration/exploration.h"
 #include "qin_art.h"
+#include "qin_slot.h"
 #include "ui_tool.h"
 #include <stdint.h>
 
@@ -234,8 +235,8 @@ static void drag_piece(lv_event_t *event)
         lv_obj_set_pos(object, x, y);
         int hovered = drop_slot(&point);
         for (unsigned i = 0; i < 3; ++i) {
-            lv_obj_set_style_border_color(pg.slots[i], lv_color_hex(
-                hovered == (int)i ? 0xffdc75 : 0xb59573), 0);
+            qin_slot_feedback(pg.slots[i], (pg.puzzle.placed_mask & (1u << i)) != 0,
+                hovered == (int)i || (pg.hint_until && pg.hint_piece == (int8_t)i));
         }
         return;
     }
@@ -294,18 +295,13 @@ static void render(void)
             pg.slots[i] = slot;
             lv_obj_clear_flag(slot, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
             lv_obj_set_height(slot, 46);
-            lv_obj_set_style_border_width(slot, 2, 0);
-            lv_obj_set_style_border_color(slot, lv_color_hex(0xb59573), 0);
+            qin_slot_feedback(slot, (pg.puzzle.placed_mask & (1u << i)) != 0,
+                              pg.hint_until && pg.hint_piece == (int8_t)i);
             if (pg.puzzle.placed_mask & (1u << i)) {
                 fragment(slot, i);
-                lv_obj_add_state(slot, LV_STATE_DISABLED);
             } else {
                 fragment(slot, i);
                 lv_obj_set_style_opa(slot, LV_OPA_50, 0);
-                if (pg.hint_until && pg.hint_piece == (int8_t)i) {
-                    lv_obj_set_style_border_color(slot, lv_color_hex(0xffdc75), 0);
-                    lv_obj_set_style_border_width(slot, 4, 0);
-                }
                 lv_obj_t *piece = button(NULL, piece_x[i], piece_y[i], 72, NULL, 0);
                 // 保持按压归属，手指离开原位置后仍收到移动与松手事件。
                 lv_obj_add_flag(piece, LV_OBJ_FLAG_PRESS_LOCK);

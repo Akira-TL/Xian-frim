@@ -1,4 +1,5 @@
 #include "qin_art.h"
+#include "qin_slot.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -45,6 +46,40 @@ static bool renders_visible_image(lv_display_t *display, qin_art_id_t id,
     return true;
 }
 
+static bool renders_persistent_correct_outline(lv_display_t *display)
+{
+    lv_obj_t *screen = lv_screen_active();
+    lv_obj_clean(screen);
+    lv_obj_t *slot = lv_button_create(screen);
+    lv_obj_set_size(slot, 72, 46);
+    lv_obj_center(slot);
+    lv_obj_set_style_pad_all(slot, 0, 0);
+    if (!qin_art_add(slot, QIN_ART_HEAD, 72, 46)) return false;
+    qin_slot_feedback(slot, false, false);
+    lv_refr_now(display);
+    memcpy(baseline, framebuffer, sizeof(framebuffer));
+    qin_slot_feedback(slot, true, false);
+    lv_refr_now(display);
+    size_t changed = 0;
+    for (size_t i = 0; i < sizeof(framebuffer); i += 2)
+        if (framebuffer[i] != baseline[i] || framebuffer[i + 1] != baseline[i + 1]) changed++;
+    bool passed = changed > 100 && lv_obj_get_style_border_width(slot, 0) == 4
+        && lv_color_eq(lv_obj_get_style_border_color(slot, 0), lv_color_hex(0xffdc75));
+    memcpy(baseline, framebuffer, sizeof(framebuffer));
+    // 拖动其他片、悬停后离开，不得让已完成槽暗下去。
+    qin_slot_feedback(slot, true, true);
+    qin_slot_feedback(slot, true, false);
+    lv_refr_now(display);
+    passed &= memcmp(baseline, framebuffer, sizeof(framebuffer)) == 0;
+    qin_slot_feedback(slot, false, true);
+    passed &= lv_obj_get_style_border_width(slot, 0) == 3;
+    qin_slot_feedback(slot, false, false);
+    passed &= lv_obj_get_style_border_width(slot, 0) == 2
+        && lv_color_eq(lv_obj_get_style_border_color(slot, 0), lv_color_hex(0xb59573));
+    printf("正确槽亮边改变像素数：%zu；持续亮边及未放置提示恢复：%s\n", changed, passed ? "通过" : "失败");
+    return passed;
+}
+
 int main(void)
 {
     lv_init();
@@ -57,6 +92,7 @@ int main(void)
     passed &= renders_visible_image(display, QIN_ART_BODY, "身体", 72, 46);
     passed &= renders_visible_image(display, QIN_ART_LEGS, "腿部", 72, 46);
     passed &= renders_visible_image(display, QIN_ART_REWARD, "收藏奖励", 200, 160);
+    passed &= renders_persistent_correct_outline(display);
     if(!passed) return 1;
     puts("通过：四张正式素材均经真实绘制入口产生可见像素；不替代实物显示和触摸验收");
     return 0;
