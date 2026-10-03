@@ -29,7 +29,7 @@ test("免登录活动查询保留空数据与模拟来源边界", async () => {
 
 test("所有演示参与者均可推演，但推演不制造到访事实", async () => {
   const response = await fetch(`${web}/api/v1/simulation`, {
-    method: "POST", headers: { "Content-Type": "application/json", Origin: web },
+    method: "POST", headers: { "Content-Type": "application/json", Origin: new URL(web).origin },
     body: JSON.stringify({ nodes: [
       { site_id: "A", initial_people: 100, arrivals_per_minute: 10, stay_minutes: 10 },
       { site_id: "B", initial_people: 0, arrivals_per_minute: 0, stay_minutes: 10 },
@@ -45,7 +45,7 @@ test("所有演示参与者均可推演，但推演不制造到访事实", async
 test("演示参与者能登记腰牌，但不能冒充终端制造实物到访", async () => {
   const registration = { badge_id: "badge-001", display_number: "001", device_id: "esp32s3-001122334455" };
   const registered = await fetch(`${web}/api/v1/badges`, {
-    method: "POST", headers: { "Content-Type": "application/json", Origin: web }, body: JSON.stringify(registration),
+    method: "POST", headers: { "Content-Type": "application/json", Origin: new URL(web).origin }, body: JSON.stringify(registration),
   });
   assert.equal(registered.status, 200);
   assert.equal(await registered.text(), JSON.stringify(registration));
@@ -97,19 +97,19 @@ test("免登录节点配置仍明确未实现小游戏与示意地图", async ()
 
 test("免登录推荐及历史查询不冒充实时模型或制造实物进度", async () => {
   const registered = await fetch(`${web}/api/v1/badges`, {
-    method: "POST", headers: { "Content-Type": "application/json", Origin: web },
+    method: "POST", headers: { "Content-Type": "application/json", Origin: new URL(web).origin },
     body: JSON.stringify({ badge_id: "recommend-test", display_number: "R01", device_id: "esp32s3-010203040506" }),
   });
   assert.equal(registered.status, 200);
   const visit = await fetch(`${web}/api/v1/demo/visits`, {
-    method: "POST", headers: { "Content-Type": "application/json", Origin: web },
+    method: "POST", headers: { "Content-Type": "application/json", Origin: new URL(web).origin },
     body: JSON.stringify({ event_id: "recommend-A", session_id: "demo-001", badge_id: "recommend-test",
       terminal_id: "k230-001", site_id: "A", config_version: 1,
       captured_at: new Date().toISOString(), time_quality: "synced" }),
   });
   assert.equal(visit.status, 200);
   const recommended = await fetch(`${web}/api/v1/recommendations`, {
-    method: "POST", headers: { "Content-Type": "application/json", Origin: web },
+    method: "POST", headers: { "Content-Type": "application/json", Origin: new URL(web).origin },
     body: JSON.stringify({ badge_id: "recommend-test", event_id: "recommend-A" }),
   });
   assert.equal(recommended.status, 200);

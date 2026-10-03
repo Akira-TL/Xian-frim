@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const config: NextConfig = {
+  basePath: "/xks",
   poweredByHeader: false,
   experimental: { cpus: 2 },
   async headers() {

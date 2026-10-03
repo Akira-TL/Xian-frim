@@ -27,6 +27,6 @@ bash scripts/backend.sh &
 backend_pid=$!
 bash scripts/web.sh "${mode}" &
 web_pid=$!
-echo "免登录演示：电脑打开 http://127.0.0.1:${PORT}；手机需另配可信 HTTPS 地址。"
+echo "免登录演示：电脑打开 http://127.0.0.1:${PORT}/xks；手机使用已配置的可信 HTTPS 地址。"
 echo "按 Ctrl+C 停止本次启动的两个服务；任一服务退出时同时停止另一个。"
 if wait -n "${backend_pid}" "${web_pid}"; then exit 0; else exit "$?"; fi

@@ -4,7 +4,7 @@ import { activitySchema, badgeSchema, commandSchema, envelopeSchema, stateSchema
 type UnlockRequest = { command_id: string; event_id: string; badge_id: string; device_id: string };
 type RequestBody = Badge | UnlockRequest | ScenarioRequest | RecommendationRequest | { nonce: string } | { device_id: string } | { challenge: string; payload_hex: string };
 
-export function createApi(base = "/api/v1") {
+export function createApi(base = "/xks/api/v1") {
   async function request<T>(path: string, schema: z.ZodType<T>, body?: RequestBody, method = body === undefined ? "GET" : "POST"): Promise<T> {
     const response = await fetch(`${base}/${path}`, {
       method, cache: "no-store", headers: { "Content-Type": "application/json" },
