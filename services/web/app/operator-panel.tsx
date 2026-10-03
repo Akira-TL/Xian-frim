@@ -25,6 +25,7 @@ export default function OperatorPanel() {
   const [busy, setBusy] = useState(false);
   const locked = useRef(false);
   const [selection, setSelection] = useState<string>();
+  const [badgeSelection, setBadgeSelection] = useState<string>();
   const control = useRef<BadgeControl | undefined>(undefined);
   const generation = useRef(0);
   const [connection, setConnection] = useState<{ badgeId: string; deviceId: string }>();
@@ -33,7 +34,7 @@ export default function OperatorPanel() {
   const [unsupported, setUnsupported] = useState<string>();
   const [registration, setRegistration] = useState<Badge>({ badge_id: "badge-001", display_number: "001", device_id: "" });
   const selected = visits.find(visit => visit.event_id === selection);
-  const selectedBadge = badges.find(badge => badge.badge_id === selected?.badge_id);
+  const selectedBadge = badges.find(badge => badge.badge_id === (selected?.badge_id ?? badgeSelection));
   const selectedCommand = commands.find(command => command.event_id === selection);
 
   function disconnect() {
@@ -42,7 +43,7 @@ export default function OperatorPanel() {
   }
 
   async function connect() {
-    if (!selectedBadge) throw new Error("请先选择已登记腰牌的到访");
+    if (!selectedBadge) throw new Error("请先选择已登记腰牌");
     const badge = selectedBadge;
     disconnect();
     const current = generation.current;
@@ -65,10 +66,11 @@ export default function OperatorPanel() {
 
   async function deviceOperation(unlock: boolean) {
     const session = control.current;
-    if (!session || !selected || connection?.badgeId !== selected.badge_id) throw new Error("请先连接对应腰牌");
+    if (!session || !selectedBadge || connection?.badgeId !== selectedBadge.badge_id) throw new Error("请先连接对应腰牌");
+    if (unlock && !selected) throw new Error("解锁必须选择实物到访");
     const current = generation.current;
     try {
-      const state = await (unlock ? session.unlock(selected) : session.sync());
+      const state = await (unlock && selected ? session.unlock(selected) : session.sync());
       if (generation.current !== current) throw new Error("连接已失效，结果未确认");
       setProgress(state);
       setNotice(unlock ? "设备已确认解锁；请在腰牌上点击开始游戏" : "设备进度已通过认证并同步后台");
@@ -96,7 +98,7 @@ export default function OperatorPanel() {
   useEffect(() => {
     let active = true;
     setUnsupported(bluetoothSupport());
-    void refresh().then(() => { if (active) setNotice("演示免登录；请选择一条到访记录"); })
+    void refresh().then(() => { if (active) setNotice("演示免登录；可先选择腰牌读取进度，解锁仍须实物到访"); })
       .catch(() => { if (active) { setOnline(false); setNotice("后台暂不可达，当前没有在线记录"); } });
     return () => { active = false; generation.current += 1; control.current?.close(); control.current = undefined; };
   }, [refresh]);
@@ -113,6 +115,32 @@ export default function OperatorPanel() {
       <p className="mt-2">执行：{phase ? phaseNames[phase] : "未核验"}</p>
       <p className="mt-3 text-sm leading-6 text-stone-600" role="status">{notice}</p>
       {unsupported && <p className="mt-3 text-sm text-amber-800">{unsupported}</p>}
+    </section>
+    <section className="mb-6 rounded-2xl bg-white p-5" aria-label="腰牌连接与进度">
+      <h2 className="text-xl font-semibold">腰牌连接与进度</h2>
+      <p className="my-3 text-sm text-stone-600">无需到访即可核对已登记腰牌、读取认证进度；连接和查询不会解锁游戏。</p>
+      <label className="block text-sm">选择已登记腰牌
+        <select aria-label="选择已登记腰牌" className="my-3 w-full rounded-lg border p-3"
+          value={selectedBadge?.badge_id ?? ""} disabled={busy || !online}
+          onChange={event => { if (!locked.current) { disconnect(); setSelection(undefined); setBadgeSelection(event.target.value); } }}>
+          <option value="">请选择腰牌</option>
+          {badges.map(badge => <option key={badge.badge_id} value={badge.badge_id}>{badge.display_number} 号 · {badge.device_id}</option>)}
+        </select>
+      </label>
+      <div className="flex flex-wrap gap-3">
+        <button className={buttonStyle} disabled={busy || !!unsupported || !selectedBadge || !online}
+          onClick={() => void operate(connect)}>连接并核对身份</button>
+        <button className={buttonStyle} disabled={busy || !connection}
+          onClick={() => void operate(() => deviceOperation(false))}>认证同步进度</button>
+        <button className="rounded-xl border border-stone-300 px-4 py-3" disabled={busy || !connection}
+          onClick={() => { disconnect(); setNotice("已主动断开；下次连接会先查询设备状态"); }}>断开设备</button>
+      </div>
+      {progress && <div className="mt-4 rounded-xl bg-stone-100 p-4 text-sm leading-7">
+        <p>认证进度：{progress.unlocked ? "已解锁" : "未解锁"} · {progress.completed ? "已通关" : "未通关"}</p>
+        <p>收藏：{progress.collected ? "已获得秦俑收藏" : "尚未获得"} · 展示：{progress.exhibiting ? "已设置" : "未设置"}</p>
+        <p>最近认证时间：{time(progress.verified_at)}</p>
+        <p>孩子离开手机通信范围后，已解锁游戏仍可在腰牌本地游玩。</p>
+      </div>}
     </section>
     <div className="grid gap-5 md:grid-cols-2">
       <section className="rounded-2xl bg-white p-5"><h2 className="text-xl font-semibold">到访记录</h2>
@@ -139,26 +167,14 @@ export default function OperatorPanel() {
           <p>{selectedCommand ? commandNames[selectedCommand.status] : "待核对实物设备"}</p>
           {selectedCommand && <p className="text-sm">请求有效期至 {time(selectedCommand.expires_at)}；过期后先查询状态，未解锁则需新的实物到访。</p>}
           <div className="flex flex-wrap gap-3 pt-2">
-            <button className={buttonStyle} disabled={busy || !!unsupported || !selectedBadge || !online}
-              onClick={() => void operate(connect)}>连接并核对身份</button>
-            <button className={buttonStyle} disabled={busy || !connection}
-              onClick={() => void operate(() => deviceOperation(false))}>认证同步进度</button>
             <button className={buttonStyle} disabled={busy || !online || !control.current?.ready
               || connection?.badgeId !== selected.badge_id || selected.source !== "physical_scan_simulated_site"
               || selected.site_id !== "A" || !!progress?.unlocked
               || !!(selectedCommand && Date.parse(selectedCommand.expires_at) <= Date.now())}
               onClick={() => void operate(() => deviceOperation(true))}>解锁本点游戏</button>
-            <button className="rounded-xl border border-stone-300 px-4 py-3" disabled={busy || !connection}
-              onClick={() => { disconnect(); setNotice("已主动断开；下次连接会先查询设备状态"); }}>断开设备</button>
           </div>
           {selected.source !== "physical_scan_simulated_site" && <p className="text-sm text-amber-800">生成模拟只供查看，禁止控制实物腰牌。</p>}
           {selected.site_id !== "A" && <p className="text-sm text-stone-600">当前仅实现 A 点《秦俑归阵》。</p>}
-          {progress && <div className="rounded-xl bg-stone-100 p-4 text-sm leading-7">
-            <p>认证进度：{progress.unlocked ? "已解锁" : "未解锁"} · {progress.completed ? "已通关" : "未通关"}</p>
-            <p>收藏：{progress.collected ? "已获得秦俑收藏" : "尚未获得"} · 展示：{progress.exhibiting ? "已设置" : "未设置"}</p>
-            <p>最近认证时间：{time(progress.verified_at)}</p>
-            <p>孩子离开手机通信范围后，已解锁游戏仍可在腰牌本地游玩。</p>
-          </div>}
           <RecommendationPanel key={selected.event_id} visit={selected} disabled={busy || !online} />
         </div> : <p className="mt-8 text-stone-500">选择左侧一条记录以核对腰牌。</p>}
       </section>
