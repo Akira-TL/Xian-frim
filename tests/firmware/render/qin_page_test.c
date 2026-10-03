@@ -12,6 +12,8 @@ static qin_puzzle_t puzzle;
 static unsigned begin_calls, brightness_writes, volume_writes;
 static uint8_t brightness = 50;
 static int volume = 50;
+static exploration_screen_t current_screen;
+esp_err_t exploration_set_screen(exploration_screen_t screen) { current_screen = screen; return ESP_OK; }
 static uint8_t framebuffer[360 * 360 * 2];
 
 // 边界替身：不访问串口、NVS、真实扬声器或用户进度。
@@ -59,6 +61,22 @@ static void click(lv_obj_t *root, const char *text)
 static void flush(lv_display_t *display, const lv_area_t *area, uint8_t *pixels)
 { (void)area; (void)pixels; lv_display_flush_ready(display); }
 
+static lv_point_t touch_point;
+static lv_indev_state_t touch_state;
+static void read_touch(lv_indev_t *input, lv_indev_data_t *data)
+{ (void)input; data->point = touch_point; data->state = touch_state; }
+static void touch(lv_indev_t *input, int x, int y, lv_indev_state_t state)
+{
+    touch_point = (lv_point_t){x, y}; touch_state = state;
+    lv_tick_inc(40); lv_indev_read(input);
+}
+static void drag(lv_indev_t *input, int from_x, int from_y, int to_x, int to_y)
+{
+    touch(input, from_x, from_y, LV_INDEV_STATE_PRESSED);
+    touch(input, to_x, to_y, LV_INDEV_STATE_PRESSED);
+    touch(input, to_x, to_y, LV_INDEV_STATE_RELEASED);
+}
+
 // 可选导出正式页面的实际绘制缓冲；不是实物屏幕摄影。
 static void capture(lv_display_t *display, const char *name)
 {
@@ -91,6 +109,13 @@ int main(void)
     page_vtable_t *table = exploration_create("exploration");
     table->on_view_load(&page);
     capture(display, "home");
+    assert(current_screen == EXPLORATION_COVER);
+    click(page.root, "开始探索");
+    capture(display, "selection");
+    assert(current_screen == EXPLORATION_SELECTION && begin_calls == 0);
+    click(page.root, "秦俑归阵");
+    capture(display, "intro");
+    assert(current_screen == EXPLORATION_INTRO && begin_calls == 0);
     click(page.root, "开始游戏");
     capture(display, "game");
     assert(begin_calls == 1);
@@ -137,10 +162,50 @@ int main(void)
     assert(visible_placed_slot && find_button(page.root, "退出") != NULL);
     lv_refr_now(display);  // 正式字体、页面及素材实际进入绘制。
     click(page.root, "退出");
+    assert(current_screen == EXPLORATION_SELECTION && puzzle.placed_mask == 1);
+    click(page.root, "秦俑归阵");
+    click(page.root, "继续游戏");
+    assert(current_screen == EXPLORATION_PLAYING && begin_calls == 1 && puzzle.placed_mask == 1);
+    click(page.root, "退出");
+    click(page.root, "秦俑归阵");
+    click(page.root, "重新开始");
+    assert(begin_calls == 2 && puzzle.placed_mask == 0);
+    click(page.root, "退出");
+    click(page.root, "封面");
     click(page.root, "设置");
     click(page.root, "返回");
-    assert(find_button(page.root, "开始游戏") != NULL && begin_calls == 1);
+    assert(find_button(page.root, "开始探索") != NULL && begin_calls == 2);
+    click(page.root, "开始探索");
+    click(page.root, "秦俑归阵");
+    click(page.root, "继续游戏");
+    lv_obj_update_layout(page.root);
+    lv_indev_t *input = lv_indev_create();
+    lv_indev_set_type(input, LV_INDEV_TYPE_POINTER);
+    lv_indev_set_display(input, display);
+    lv_indev_set_read_cb(input, read_touch);
+    lv_area_t root_bounds;
+    lv_obj_get_coords(page.root, &root_bounds);
+    int x = root_bounds.x1, y = root_bounds.y1;
+    drag(input, x + 84, y + 190, x + 180, y + 110);
+    assert(puzzle.placed_mask == 1);
+    lv_obj_update_layout(page.root);
+    drag(input, x + 276, y + 130, x + 180, y + 158);
+    assert(puzzle.placed_mask == 3);
+    lv_obj_update_layout(page.root);
+    drag(input, x + 84, y + 130, x + 180, y + 206);
+    assert(puzzle.placed_mask == 7 && progress.completed && progress.collected);
+    assert(current_screen == EXPLORATION_RESULT);
+    capture(display, "result");
+    click(page.root, "查看收藏");
+    assert(current_screen == EXPLORATION_COLLECTION);
+    capture(display, "collection");
+    click(page.root, "设为展示");
+    assert(current_screen == EXPLORATION_EXHIBIT && progress.exhibiting);
+    capture(display, "exhibit");
+    click(page.root, "首页");
+    assert(current_screen == EXPLORATION_COVER);
+    lv_indev_delete(input);
     table->on_view_did_unload(&page);
-    puts("通过：正式游戏页面设置返回保留碎片和亮边，首页返回正确，滑块仅松手保存；不替代实物触摸或NVS验收");
+    puts("通过：封面、选游戏、说明与游玩切换；设置和退出保留碎片，明确重玩才重置，滑块仅松手保存");
     return 0;
 }

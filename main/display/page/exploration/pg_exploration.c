@@ -8,12 +8,14 @@
 
 LV_FONT_DECLARE(font_puhui_18_4)
 
-typedef enum { VIEW_HOME, VIEW_GAME, VIEW_COLLECTION, VIEW_EXHIBIT, VIEW_SETTINGS } view_t;
+typedef enum { VIEW_HOME, VIEW_GAMES, VIEW_INTRO, VIEW_GAME, VIEW_SUCCESS,
+               VIEW_COLLECTION, VIEW_EXHIBIT, VIEW_SETTINGS } view_t;
 static struct {
     lv_obj_t *root;
     lv_timer_t *timer;
     view_t view;
     view_t settings_return;
+    bool game_started;
     qin_progress_t progress;
     qin_puzzle_t puzzle;
     const char *notice;
@@ -130,11 +132,32 @@ static void navigate(lv_event_t *event)
 {
     view_t target = (view_t)(intptr_t)lv_event_get_user_data(event);
     pg.notice = NULL;
-    if (target == VIEW_GAME && exploration_begin() != ESP_OK) {
-        pg.notice = "请先到点扫码解锁";
-        target = VIEW_HOME;
+    if (target == VIEW_GAME) {
+        // 返回、设置和选游戏只暂停。只有首次开始或完成后的再玩才初始化拼图。
+        qin_puzzle_t current;
+        if (exploration_get(NULL, &current, NULL) != ESP_OK ||
+            ((!pg.game_started || current.placed_mask == 7) && exploration_begin() != ESP_OK)) {
+            pg.notice = "请先到点扫码解锁";
+            target = VIEW_INTRO;
+        } else {
+            pg.game_started = true;
+        }
     }
     pg.view = target;
+    render();
+}
+
+static void restart_game(lv_event_t *event)
+{
+    (void)event;
+    if (exploration_begin() != ESP_OK) {
+        pg.notice = "暂不能重新开始";
+    } else {
+        pg.game_started = true;
+        pg.hint_until = 0;
+        pg.notice = NULL;
+        pg.view = VIEW_GAME;
+    }
     render();
 }
 
@@ -185,8 +208,8 @@ static void place_piece(uint8_t piece, uint8_t slot)
     if (error != ESP_OK) {
         pg.notice = "保存失败，请重新拖放";
     } else if (result == QIN_COMPLETED || result == QIN_REPLAY_COMPLETED) {
-        pg.view = VIEW_COLLECTION;
-        pg.notice = result == QIN_COMPLETED ? "通关！奖励已收藏" : "再次完成，不重复发奖";
+        pg.view = VIEW_SUCCESS;
+        pg.notice = result == QIN_COMPLETED ? "秦俑守护已收藏" : "再次完成，收藏保留";
     } else if (result == QIN_WRONG) {
         pg.notice = "看看轮廓，再试一次";
         qin_puzzle_t current;
@@ -296,6 +319,10 @@ static void exhibit(lv_event_t *event)
 static void render(void)
 {
     if (!pg.root) return;
+    static const exploration_screen_t screens[] = {
+        EXPLORATION_COVER, EXPLORATION_SELECTION, EXPLORATION_INTRO, EXPLORATION_PLAYING,
+        EXPLORATION_RESULT, EXPLORATION_COLLECTION, EXPLORATION_EXHIBIT, EXPLORATION_SETTINGS};
+    exploration_set_screen(screens[pg.view]);
     pg.drag.object = NULL;
     pg.instruction = NULL;
     lv_obj_clean(pg.root);
@@ -313,7 +340,10 @@ static void render(void)
         button("设置", 110, 220, 140, open_settings, 0);
         return;
     }
-    title(pg.view == VIEW_GAME ? "秦俑归阵" : "长安游迹");
+    if (pg.view == VIEW_HOME) qin_art_add(pg.root, QIN_ART_COVER, 360, 360);
+    title(pg.view == VIEW_GAME || pg.view == VIEW_INTRO ? "秦俑归阵" :
+          pg.view == VIEW_GAMES ? "选择游戏" : pg.view == VIEW_SUCCESS ? "拼接完成" :
+          pg.view == VIEW_COLLECTION ? "我的收藏" : "长安游迹");
     if (pg.view == VIEW_GAME) {
         const int piece_x[] = {48, 240, 48};
         const int piece_y[] = {176, 110, 110};
@@ -338,8 +368,21 @@ static void render(void)
             }
         }
         pg.instruction = label(pg.notice ? pg.notice : "拖入轮廓", 244);
-        button("退出", 78, 280, 98, navigate, VIEW_HOME);
+        button("退出", 78, 280, 98, navigate, VIEW_GAMES);
         button("设置", 184, 280, 98, open_settings, 0);
+    } else if (pg.view == VIEW_SUCCESS) {
+        lv_obj_t *art = lv_obj_create(pg.root);
+        lv_obj_remove_style_all(art);
+        lv_obj_set_pos(art, 108, 76);
+        lv_obj_set_size(art, 144, 130);
+        lv_obj_clear_flag(art, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+        qin_art_add(art, QIN_ART_GUARDIAN, 144, 130);
+        label(pg.notice ? pg.notice : "秦俑守护已收藏", 208);
+        lv_obj_t *display = button("设为展示", 70, 238, 220, exhibit, 0);
+        primary(display);
+        lv_obj_set_height(display, 48);
+        lv_obj_set_height(button("查看收藏", 78, 291, 98, navigate, VIEW_COLLECTION), 44);
+        lv_obj_set_height(button("选游戏", 184, 291, 98, navigate, VIEW_GAMES), 44);
     } else if (pg.view == VIEW_COLLECTION || pg.view == VIEW_EXHIBIT) {
         if (pg.progress.collected) {
             lv_obj_t *art = button(NULL, 80, 80, 200, navigate, VIEW_COLLECTION);
@@ -358,32 +401,50 @@ static void render(void)
                 }
             }
             label(pg.notice ? pg.notice : "秦俑守护", 240);
-            if (pg.view == VIEW_COLLECTION)
-                primary(button("设为展示", 90, 276, 180, exhibit, 0));
+            if (pg.view == VIEW_COLLECTION) {
+                lv_obj_t *display = button("设为展示", 65, 276, 140, exhibit, 0);
+                primary(display);
+                lv_obj_set_height(display, 44);
+                lv_obj_set_height(button("返回", 215, 276, 80, navigate, VIEW_GAMES), 44);
+            }
             else
                 button("首页", 110, 276, 140, navigate, VIEW_HOME);
         } else {
             label("完成游戏，收藏秦俑", 140);
             button("首页", 110, 260, 140, navigate, VIEW_HOME);
         }
-    } else {
+    } else if (pg.view == VIEW_GAMES || pg.view == VIEW_INTRO) {
         lv_obj_t *art = lv_obj_create(pg.root);
         lv_obj_remove_style_all(art);
         lv_obj_set_pos(art, 116, 65);
         lv_obj_set_size(art, 128, 128);
         lv_obj_clear_flag(art, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
         qin_art_add(art, QIN_ART_GUARDIAN, 128, 128);
-        lv_obj_t *status = label(pg.notice ? pg.notice : (pg.progress.unlocked ? "秦俑归阵" : "扫码解锁游戏"), 194);
+        lv_obj_t *status = label(pg.notice ? pg.notice : (pg.progress.unlocked ?
+            (pg.view == VIEW_INTRO ? "拖动三片，拼回秦俑" : "三片拼接，收藏秦俑") : "扫码解锁游戏"), 194);
         lv_obj_set_style_text_color(status, lv_color_hex(0x6e654d), 0);
-        lv_obj_t *play = button(pg.progress.completed ? "再玩一次" : "开始游戏", 70, 220, 220, navigate, VIEW_GAME);
+        bool resume = pg.game_started && pg.puzzle.placed_mask != 7;
+        lv_obj_t *play = button(pg.view == VIEW_GAMES ? "秦俑归阵" :
+            (resume ? "继续游戏" : pg.progress.completed ? "再玩一次" : "开始游戏"),
+            70, 226, 220, navigate, pg.view == VIEW_GAMES ? VIEW_INTRO : VIEW_GAME);
         lv_obj_set_height(play, 50);
         primary(play);
         lv_obj_t *caption = lv_obj_get_child(play, 0);
         lv_obj_set_style_transform_scale_x(caption, 384, 0);
         lv_obj_set_style_transform_scale_y(caption, 384, 0);
-        if (!pg.progress.unlocked) lv_obj_add_state(play, LV_STATE_DISABLED);
-        lv_obj_set_height(button("收藏", 82, 281, 94, navigate, VIEW_COLLECTION), 44);
-        lv_obj_set_height(button("设置", 184, 281, 94, open_settings, 0), 44);
+        if (pg.view == VIEW_INTRO && !pg.progress.unlocked) lv_obj_add_state(play, LV_STATE_DISABLED);
+        lv_obj_set_height(button(pg.view == VIEW_GAMES ? "封面" : "返回", 82, 286, 94,
+            navigate, pg.view == VIEW_GAMES ? VIEW_HOME : VIEW_GAMES), 44);
+        if (pg.view == VIEW_INTRO && resume && pg.puzzle.placed_mask)
+            lv_obj_set_height(button("重新开始", 184, 286, 94, restart_game, 0), 44);
+        else
+            lv_obj_set_height(button("收藏", 184, 286, 94, navigate, VIEW_COLLECTION), 44);
+    } else {
+        lv_obj_t *play = button("开始探索", 70, 235, 220, navigate, VIEW_GAMES);
+        primary(play);
+        lv_obj_set_height(play, 50);
+        lv_obj_set_height(button("收藏", 82, 292, 94, navigate, VIEW_COLLECTION), 44);
+        lv_obj_set_height(button("设置", 184, 292, 94, open_settings, 0), 44);
     }
 }
 
@@ -408,6 +469,7 @@ static void load(page_base_t *self)
 {
     pg.root = self->root;
     pg.view = VIEW_HOME;
+    pg.game_started = false;
     pg.notice = NULL;
     pg.hint_piece = -1;
     pg.hint_until = 0;
