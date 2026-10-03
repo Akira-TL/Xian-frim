@@ -2,6 +2,8 @@
 #include "cl_ui.h"
 #include "services/exploration/exploration.h"
 #include "qin_art.h"
+#include "cover_image.h"
+#include "services/cover/cover_service.h"
 #include "qin_slot.h"
 #include "ui_tool.h"
 #include <stdint.h>
@@ -24,6 +26,7 @@ static struct {
     const char *notice;
     int8_t hint_piece;
     uint32_t hint_until;
+    uint32_t cover_revision;
     lv_obj_t *slots[3];
     lv_obj_t *instruction;
     struct {
@@ -481,7 +484,8 @@ static void render(void)
         return;
     }
     exploration_snapshot(&pg.snapshot);
-    if (pg.view == VIEW_HOME) qin_art_add(pg.root, QIN_ART_COVER, 360, 360);
+    if (pg.view == VIEW_HOME && !cover_image_add(pg.root, &pg.cover_revision))
+        qin_art_add(pg.root, QIN_ART_COVER, 360, 360);
     title(pg.view == VIEW_GAME || pg.view == VIEW_INTRO ? game_names[pg.game] :
           pg.view == VIEW_GAMES ? "选择游戏" : pg.view == VIEW_SUCCESS ? "通关成功" :
           pg.view == VIEW_COLLECTION ? "我的收藏" : "长安游迹");
@@ -590,6 +594,10 @@ static void poll(lv_timer_t *timer)
     (void)timer;
     // 定时提示及远程进度不能在拖动中删掉手指正在操作的对象。
     if (pg.drag.object || pg.view == VIEW_SETTINGS) return;
+    if (pg.view == VIEW_HOME && pg.cover_revision != cover_service_revision()) {
+        render();
+        return;
+    }
     if (pg.hint_until && (int32_t)(lv_tick_get() - pg.hint_until) >= 0) {
         pg.hint_until = 0;
         render();

@@ -17,6 +17,9 @@ static exploration_game_t current_game;
 static bonus_round_t rounds[2];
 static uint8_t bonus_collected;
 static uint8_t exhibit_game = GAME_COUNT;
+uint32_t cover_service_revision(void) { return 0; }
+bool cover_service_copy(uint8_t **data, size_t *size, uint32_t *revision)
+{ (void)data; (void)size; (void)revision; return false; }
 esp_err_t exploration_set_screen(exploration_screen_t screen) { current_screen = screen; return ESP_OK; }
 esp_err_t exploration_set_game(exploration_game_t game) { current_game = game; return ESP_OK; }
 esp_err_t exploration_snapshot(exploration_snapshot_t *out)

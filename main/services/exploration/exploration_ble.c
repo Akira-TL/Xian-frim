@@ -1,6 +1,8 @@
 #include "exploration_ble.h"
 #include "exploration.h"
 #include "badge_auth.h"
+#include "services/cover/cover_service.h"
+#include "services/cover/cover_transfer.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -38,6 +40,9 @@ static const ble_uuid128_t control_uuid = BLE_UUID128_INIT(
 static const ble_uuid128_t reply_uuid = BLE_UUID128_INIT(
     0x4f, 0x97, 0xb3, 0x02, 0xce, 0x78, 0xf1, 0xb1,
     0x10, 0x4a, 0xaa, 0x64, 0x06, 0x40, 0x99, 0x5e);
+static const ble_uuid128_t cover_uuid = BLE_UUID128_INIT(
+    0x4f, 0x97, 0xb3, 0x02, 0xce, 0x78, 0xf1, 0xb1,
+    0x10, 0x4a, 0xaa, 0x64, 0x07, 0x40, 0x99, 0x5e);
 
 typedef struct {
     bool active;
@@ -50,6 +55,7 @@ static auth_connection_t connections[CONFIG_BT_NIMBLE_MAX_CONNECTIONS];
 
 static void disconnected(uint16_t connection)
 {
+    cover_service_disconnect(connection);
     for (size_t i = 0; i < CONFIG_BT_NIMBLE_MAX_CONNECTIONS; ++i) {
         if (connection == UINT16_MAX || connections[i].connection == connection)
             memset(&connections[i], 0, sizeof(connections[i]));
@@ -168,6 +174,24 @@ static int read_value(uint16_t connection, uint16_t handle,
     return os_mbuf_append(context->om, state, length) == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
 }
 
+static int access_cover(uint16_t connection, uint16_t handle,
+                        struct ble_gatt_access_ctxt *context, void *argument)
+{
+    (void)handle;
+    (void)argument;
+    if (context->op == BLE_GATT_ACCESS_OP_READ_CHR) {
+        uint8_t status[24];
+        cover_service_status(status);
+        return os_mbuf_append(context->om, status, sizeof(status)) == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
+    }
+    if (context->op != BLE_GATT_ACCESS_OP_WRITE_CHR) return BLE_ATT_ERR_WRITE_NOT_PERMITTED;
+    size_t size = OS_MBUF_PKTLEN(context->om);
+    uint8_t packet[11 + COVER_CHUNK_BYTES];
+    if (size < 7 || size > sizeof(packet)) return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+    if (os_mbuf_copydata(context->om, 0, size, packet) != 0) return BLE_ATT_ERR_UNLIKELY;
+    return cover_service_packet(connection, packet, size) ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
+}
+
 static const struct ble_gatt_svc_def services[] = {
     {.type = BLE_GATT_SVC_TYPE_PRIMARY, .uuid = &service_uuid.u,
      .characteristics = (struct ble_gatt_chr_def[]){
@@ -176,6 +200,7 @@ static const struct ble_gatt_svc_def services[] = {
          {.uuid = &nonce_uuid.u, .access_cb = access_auth, .flags = BLE_GATT_CHR_F_READ, .arg = (void *)AUTH_NONCE},
          {.uuid = &control_uuid.u, .access_cb = access_auth, .flags = BLE_GATT_CHR_F_WRITE, .arg = (void *)AUTH_CONTROL},
          {.uuid = &reply_uuid.u, .access_cb = access_auth, .flags = BLE_GATT_CHR_F_READ, .arg = (void *)AUTH_REPLY},
+         {.uuid = &cover_uuid.u, .access_cb = access_cover, .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE},
          {0}}},
     {0}};
 

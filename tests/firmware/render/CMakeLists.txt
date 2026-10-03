@@ -8,7 +8,7 @@ if(NOT EXISTS "${FIRMWARE_BUILD_DIR}/sdkconfig" OR
 endif()
 
 # 解码选项取自实际固件配置，不在测试中硬编码修复所需的开关。
-foreach(OPTION LV_USE_RLE LV_BIN_DECODER_RAM_LOAD)
+foreach(OPTION LV_USE_RLE LV_BIN_DECODER_RAM_LOAD LV_USE_TJPGD)
     file(STRINGS "${FIRMWARE_BUILD_DIR}/sdkconfig" ENABLED REGEX "^CONFIG_${OPTION}=y$")
     if(ENABLED)
         set(${OPTION}_VALUE 1)
@@ -16,7 +16,17 @@ foreach(OPTION LV_USE_RLE LV_BIN_DECODER_RAM_LOAD)
         set(${OPTION}_VALUE 0)
     endif()
 endforeach()
+
+add_executable(cover_storage_test cover_storage_test.c
+    "${PROJECT_ROOT}/main/services/cover/cover_transfer.c"
+    "${PROJECT_ROOT}/main/services/cover/cover_jpeg.c"
+    "${PROJECT_ROOT}/main/display/page/exploration/cover_image.c")
+target_include_directories(cover_storage_test PRIVATE "${PROJECT_ROOT}/main"
+    "${PROJECT_ROOT}/main/display/page/exploration")
+target_compile_options(cover_storage_test PRIVATE -UNDEBUG -Wall -Wextra)
+target_link_libraries(cover_storage_test PRIVATE lvgl m)
 add_compile_definitions(LV_USE_RLE=${LV_USE_RLE_VALUE}
+    LV_USE_TJPGD=${LV_USE_TJPGD_VALUE}
     LV_BIN_DECODER_RAM_LOAD=${LV_BIN_DECODER_RAM_LOAD_VALUE})
 set(LV_BUILD_CONF_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lv_conf.h" CACHE PATH "" FORCE)
 set(CONFIG_LV_BUILD_DEMOS OFF CACHE BOOL "" FORCE)
@@ -44,6 +54,8 @@ target_link_libraries(qin_fallback_test PRIVATE lvgl m)
 # 运行正式游戏页面；仅设备状态和亮度／音量存储接口使用测试替身。
 foreach(PAGE_TARGET qin_page_test qin_broken_page_test)
 add_executable(${PAGE_TARGET} qin_page_test.c
+    "${PROJECT_ROOT}/main/display/page/exploration/cover_image.c"
+    "${PROJECT_ROOT}/main/services/cover/cover_jpeg.c"
     "${PROJECT_ROOT}/main/display/page/exploration/pg_exploration.c"
     "${PROJECT_ROOT}/main/display/page/exploration/qin_slot.c"
     "${PROJECT_ROOT}/main/display/page/exploration/qin_art.c"

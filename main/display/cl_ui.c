@@ -10,6 +10,7 @@
 // #endif
 #include "page_manager/inc/page_manager_private.h"
 #include "services/exploration/exploration.h"
+#include "services/cover/cover_service.h"
 #include "esp_log.h"
 #include "assert/font/font_init.h"
 
@@ -223,6 +224,7 @@ void wakeup_ai(){
 void ui_init(){
     cl_font_init();
     esp_err_t progress_error = exploration_init();
+    cover_service_init();
     if (progress_error != ESP_OK) {
         ESP_LOGE(TAG, "Exploration storage unavailable: %s", esp_err_to_name(progress_error));
     }

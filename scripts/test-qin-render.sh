@@ -12,3 +12,5 @@ cmake --build "${test_build_dir}" -j 6 >> "${project_root}/logs/qin-render-test-
 "${test_build_dir}/qin_fallback_test"
 "${test_build_dir}/qin_page_test"
 "${test_build_dir}/qin_broken_page_test"
+node "${project_root}/scripts/assets/prepare-cover-test-images.ts" "${firmware_build_dir}/cover-test-images"
+"${test_build_dir}/cover_storage_test" "${firmware_build_dir}/cover-test-images"
