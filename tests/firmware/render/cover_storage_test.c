@@ -76,7 +76,14 @@ static void flush(lv_display_t *display, const lv_area_t *area, uint8_t *pixels)
 { (void)area; (void)pixels; lv_display_flush_ready(display); }
 int main(int argc, char **argv)
 {
-    assert(argc == 2);
+    assert(argc == 2 || argc == 3);
+    if (argc == 3) {
+        size_t browser_size;
+        uint8_t *browser = load(argv[2], "cover-browser", &browser_size);
+        assert(validate(browser, browser_size));
+        free(browser);
+        puts("真实浏览器导出的圆屏 JPEG 通过固件解码校验");
+    }
     size_t red_size, green_size, other_size;
     uint8_t *red = load(argv[1], "red", &red_size), *green = load(argv[1], "green", &green_size);
     uint8_t *other = load(argv[1], "wrong-size", &other_size);

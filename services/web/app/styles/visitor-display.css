@@ -1,4 +1,21 @@
 /* 游客展示样式仅作用于 display-app，不影响运营面板。 */
+.display-app .cover-photo-panel{border-top:1px solid #e8dcc7;padding:0 12px 8px}
+.cover-photo-entry{display:flex;align-items:center;gap:10px;padding:10px 0 4px}
+.cover-photo-entry>svg{color:#aa704d;width:22px;height:22px}.cover-photo-entry>div{flex:1}
+.cover-photo-entry strong{display:block;font-size:13px}.cover-photo-entry span{display:block;font-size:10px;color:#837961;margin-top:3px}
+.cover-photo-panel button{border:1px solid #dbc9ab;border-radius:8px;background:#fff8e8;color:#214b40;min-height:38px;padding:7px 12px;font-size:12px}
+.cover-photo-panel button:disabled{opacity:.45;cursor:default}
+.cover-photo-editor{padding:12px 0 4px;border-top:1px dashed #ded0b8;margin-top:8px}
+.cover-photo-editor-heading{display:flex;justify-content:space-between;align-items:center;font-size:13px}
+.cover-photo-editor-heading button{padding:4px;min-height:32px;border:0;background:none}
+.cover-photo-editor canvas{display:block;width:192px;height:192px;max-width:100%;border-radius:50%;border:3px solid #c4a779;margin:10px auto 12px;touch-action:none;cursor:grab}
+.cover-photo-editor canvas:active{cursor:grabbing}.cover-photo-hint,.cover-photo-size{text-align:center;font-size:10px;color:#837961;margin:8px 0}
+.cover-photo-zoom{display:flex;align-items:center;gap:12px;font-size:12px;padding:0 12px}.cover-photo-zoom input{flex:1;min-width:0;height:38px;accent-color:#b64f32}
+.cover-photo-actions{display:flex;gap:8px;justify-content:center}.display-app .cover-photo-actions .visitor-primary{flex:1;max-width:240px}
+.cover-photo-footer{display:flex;justify-content:flex-end}.cover-photo-footer button{display:flex;gap:3px;align-items:center;border:0;background:none;padding:4px 0;font-size:10px;min-height:32px;color:#8b7a60}
+.cover-photo-restore{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:11px}.cover-photo-restore>span{flex:1;min-width:160px}
+.cover-photo-notice{display:flex;align-items:center;gap:5px;font-size:12px;margin:8px 0;color:#9c472f;line-height:1.6}.cover-photo-notice.is-saved{color:#214b40}
+.cover-photo-progress{display:grid;gap:8px;font-size:12px;text-align:center;margin:12px 0}.cover-photo-progress progress{width:100%;height:8px;accent-color:#b64f32}
 @font-face{font-family:"Changan Display";src:url("/xks/fonts/noto-serif-sc-display-v1.ttf") format("truetype");font-weight:600;font-display:swap}
 .display-app{--ink:#214b40;--red:#b64f32;--paper:#f7efdf;max-width:460px;padding:0 16px 84px;background:var(--paper);color:var(--ink)}
 .display-app [hidden]{display:none!important}
