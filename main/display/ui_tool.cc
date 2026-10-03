@@ -203,6 +203,21 @@ void ui_tool_play_alarm_sound(void)
     ESP_LOGI(TAG, "Playing alarm sound");
 }
 
+void ui_tool_play_game_sound(void)
+{
+    auto codec = Board::GetInstance().GetAudioCodec();
+    if (codec == nullptr || codec->output_volume() == 0) {
+        return;
+    }
+    // 解码队列可能等待空位，不在 LVGL 触摸回调内播放。
+    Application::GetInstance().Schedule([]() {
+        auto current_codec = Board::GetInstance().GetAudioCodec();
+        if (current_codec != nullptr && current_codec->output_volume() > 0) {
+            Application::GetInstance().PlaySound(Lang::Sounds::OGG_POPUP);
+        }
+    });
+}
+
 uint8_t ui_tool_is_wifi_connected(void)
 {
     return WifiStation::GetInstance().IsConnected() ? 1 : 0;

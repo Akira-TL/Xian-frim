@@ -171,6 +171,10 @@ static void place_piece(uint8_t piece, uint8_t slot)
     } else {
         pg.notice = "放对了！继续拼接";
     }
+    if (error == ESP_OK && (result == QIN_PLACED || result == QIN_COMPLETED ||
+                            result == QIN_REPLAY_COMPLETED)) {
+        ui_tool_play_game_sound();
+    }
     render();
 }
 

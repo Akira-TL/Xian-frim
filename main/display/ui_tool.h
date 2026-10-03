@@ -34,6 +34,8 @@ cl_time_t ui_tool_get_time(void);
 
 // 音频播放相关（用于闹钟铃声等）
 void ui_tool_play_alarm_sound(void);
+// 拼图正确放置的短促反馈；异步播放，遵守当前音量与静音设置。
+void ui_tool_play_game_sound(void);
 
 // WiFi 状态相关
 uint8_t ui_tool_is_wifi_connected(void);
