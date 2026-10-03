@@ -95,7 +95,7 @@ export default function OperatorPanel() {
       if (current === generation.current) { disconnect(); setNotice("连接已断开，请重新连接"); }
     });
     if (current !== generation.current) { link.close(); throw new Error("请重新选择腰牌"); }
-    const session = new BadgeControl(badge, link, api); control.current = session;
+    const session = new BadgeControl(badge, link, api, {demoMode: true}); control.current = session;
     try {
       const state = await session.sync();
       if (current !== generation.current) throw new Error("连接已失效，请重试");

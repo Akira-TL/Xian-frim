@@ -97,10 +97,10 @@ static int access_auth(uint16_t connection, uint16_t handle,
                        struct ble_gatt_access_ctxt *context, void *argument)
 {
     (void)handle;
-    uint8_t mac[6];
-    if (!CHANGAN_DEVICE_KEY_CONFIGURED || esp_read_mac(mac, ESP_MAC_WIFI_STA) != ESP_OK ||
-        memcmp(mac, changan_device_mac, sizeof(mac)) != 0)
-        return BLE_ATT_ERR_INSUFFICIENT_AUTHEN;
+    if (!CHANGAN_DEVICE_KEY_CONFIGURED) return BLE_ATT_ERR_INSUFFICIENT_AUTHEN;
+    // 比赛演示编号随烧录包携带，不绑定目标芯片出厂地址。
+    // 仍验证消息签名、随机数与保存结果；同包设备不是独立的真实到访身份。
+    const uint8_t *mac = changan_device_mac;
     badge_auth_t *state = connection_state(connection);
     if (!state) return BLE_ATT_ERR_INSUFFICIENT_RES;
     auth_attribute_t attribute = (auth_attribute_t)(intptr_t)argument;
@@ -133,7 +133,8 @@ static int read_value(uint16_t connection, uint16_t handle,
     (void)handle;
     if (context->op != BLE_GATT_ACCESS_OP_READ_CHR) return BLE_ATT_ERR_READ_NOT_PERMITTED;
     uint8_t mac[6];
-    if (esp_read_mac(mac, ESP_MAC_WIFI_STA) != ESP_OK) return BLE_ATT_ERR_UNLIKELY;
+    if (CHANGAN_DEVICE_KEY_CONFIGURED) memcpy(mac, changan_device_mac, sizeof(mac));
+    else if (esp_read_mac(mac, ESP_MAC_WIFI_STA) != ESP_OK) return BLE_ATT_ERR_UNLIKELY;
     char device[32];
     snprintf(device, sizeof(device), "esp32s3-%02x%02x%02x%02x%02x%02x",
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);

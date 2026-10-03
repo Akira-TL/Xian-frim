@@ -27,10 +27,12 @@ export class BadgeControl {
   private closed = false;
   private busy = false;
   private timeoutMs: number;
+  private demoMode: boolean;
   constructor(badge: Badge, link: BadgeLink, api: ControlApi,
-              options: { timeoutMs?: number; onPhase?: (phase: ControlPhase) => void } = {}) {
+              options: { timeoutMs?: number; onPhase?: (phase: ControlPhase) => void; demoMode?: boolean } = {}) {
     this.badge = badge; this.link = link; this.api = api; this.onPhase = options.onPhase ?? (() => {});
     this.timeoutMs = options.timeoutMs ?? 15_000;
+    this.demoMode = options.demoMode ?? false;
   }
 
   get ready(): boolean { return this.synced && !this.closed; }
@@ -55,13 +57,13 @@ export class BadgeControl {
   async runtime(): Promise<BadgeRuntime | undefined> {
     return this.run(async () => {
       if (!this.synced) throw new Error("请先认证同步当前设备进度");
-      if (await this.step(() => this.link.identity()) !== this.badge.device_id)
+      if (!this.demoMode && await this.step(() => this.link.identity()) !== this.badge.device_id)
         throw new Error("实物身份与当前腰牌不一致");
       if (!this.link.snapshot) return undefined;
       const snapshot = await this.step(() => this.link.snapshot!());
       if (!snapshot) return undefined;
       const value = badgeRuntimeSchema.parse(snapshot);
-      if (value.device_id !== this.badge.device_id) throw new Error("实时界面信息来自其他设备");
+      if (!this.demoMode && value.device_id !== this.badge.device_id) throw new Error("实时界面信息来自其他设备");
       return value;
     });
   }
@@ -89,7 +91,7 @@ export class BadgeControl {
     return this.run(async () => {
       this.synced = false;
       this.onPhase("checking");
-      if (await this.step(() => this.link.identity()) !== this.badge.device_id) throw new Error("实物身份与登记不一致，禁止发送");
+      if (!this.demoMode && await this.step(() => this.link.identity()) !== this.badge.device_id) throw new Error("实物身份与登记不一致，禁止发送");
       const envelope = await this.step(() => this.api.stateChallenge(this.badge.badge_id));
       const state = await this.exchange(envelope);
       this.synced = true;
@@ -104,7 +106,7 @@ export class BadgeControl {
           || visit.session_id !== "demo-001" || visit.badge_id !== this.badge.badge_id) {
         throw new Error("必须选择当前腰牌在 A 点的实物到访或接口测试记录");
       }
-      if (await this.step(() => this.link.identity()) !== this.badge.device_id) throw new Error("实物身份与登记不一致，禁止发送");
+      if (!this.demoMode && await this.step(() => this.link.identity()) !== this.badge.device_id) throw new Error("实物身份与登记不一致，禁止发送");
       this.onPhase("authorizing");
       const command = await this.step(() => this.api.createUnlock({ command_id: crypto.randomUUID(), event_id: visit.event_id,
         badge_id: this.badge.badge_id, device_id: this.badge.device_id }));

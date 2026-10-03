@@ -184,6 +184,16 @@ test("实时封面、拼接与通关页面不会自行生成认证完成记录",
   assert.equal(badgeRuntimeSchema.safeParse({...link.view, stage: 3}).success, false);
   assert.equal(badgeRuntimeSchema.safeParse({...link.view, bonus_collected: 0}).success, false);
   assert.equal(badgeRuntimeSchema.safeParse({...link.view, game_id: "unknown"}).success, false);
+  // 演示模式允许硬件出厂地址不同，但仍必须收到正确的操作回执。
+  const demo = new BadgeControl(badge, link, api, {demoMode: true});
+  link.identity = async () => "esp32s3-112233445566";
+  await demo.sync();
+  link.view = {...link.view, device_id: "esp32s3-112233445566"};
+  assert.equal((await demo.runtime())?.device_id, "esp32s3-112233445566");
+  link.corruptReply = true;
+  await assert.rejects(demo.sync(), /认证失败/);
+  link.corruptReply = false;
+  link.identity = async () => badge.device_id;
   link.flags = 7;
   assert.equal((await control.sync()).completed, true);
   control.close();
