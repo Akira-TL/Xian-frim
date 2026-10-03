@@ -12,7 +12,7 @@ from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 
 from .models import (
-    BadgeRegistration, ErrorResponse, Health, ScanRequest, ScanResponse, SentReport,
+    BadgeRegistration, ErrorResponse, Health, ScanRequest, ScanResponse, SentReport, InterfaceTestScanRequest,
     SiteSelection, Source, TerminalConfiguration, UnlockCommand, UnlockRequest, Visit,
     HeartbeatReceipt, MapSnapshot, TerminalHeartbeat, ActivitySnapshot,
 )
@@ -107,6 +107,10 @@ def create_app(db_path: Path, operator_token: str, terminal_token: str,
     @app.post("/api/v1/demo/visits", dependencies=[Depends(operator)])
     def simulated_scan(request: ScanRequest) -> ScanResponse:
         return repository.scan(request, clock(), Source.GENERATED)
+
+    @app.post("/api/v1/interface-test/visits", dependencies=[Depends(operator)])
+    def interface_test_scan(request: InterfaceTestScanRequest) -> ScanResponse:
+        return repository.scan(request, clock(), Source.INTERFACE_TEST)
 
     @app.get("/api/v1/visits", dependencies=[Depends(operator)])
     def visits() -> list[Visit]:

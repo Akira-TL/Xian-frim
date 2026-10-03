@@ -83,6 +83,42 @@ def test_unknown_badge_is_rejected(client: TestClient) -> None:
     assert response.status_code == 404
 
 
+def test_interface_test_visit_unlocks_without_claiming_physical_arrival(client: TestClient) -> None:
+    register(client)
+    payload = scan("interface-001").model_dump_json().replace('"k230-001"', '"interface-test-001"')
+    response = client.post("/api/v1/interface-test/visits", content=payload, headers=operator())
+    assert response.status_code == 200, response.text
+    assert response.json()["visit"]["source"] == "interface_test"
+    assert response.json()["visit"]["terminal_id"] == "interface-test-001"
+    assert response.json()["can_unlock"] is True
+    request = UnlockRequest(command_id="interface-unlock", event_id="interface-001",
+                            badge_id="badge-001", device_id="esp32-test")
+    assert client.post("/api/v1/unlock-commands", content=request.model_dump_json(), headers=operator()).status_code == 200
+    physical = client.get("/api/v1/activity", headers=operator()).json()
+    assert physical["progress"]["eligible_badges"] == 0
+    assert all(site["recent_unique_badges"] == 0 for site in physical["map"]["sites"])
+
+
+def test_interface_test_identity_roles_and_retry_remain_separate(client: TestClient) -> None:
+    register(client)
+    payload = scan("interface-002").model_dump_json().replace('"k230-001"', '"interface-test-001"')
+    route = "/api/v1/interface-test/visits"
+    assert client.post(route, content=payload, headers=terminal()).status_code == 401
+    assert client.post("/api/v1/visits", content=payload, headers=terminal()).status_code == 422
+    assert client.post(route, content=scan().model_dump_json(), headers=operator()).status_code == 422
+    assert client.post(route, content=payload.replace('"site_id":"A"', '"site_id":"B"'), headers=operator()).status_code == 422
+    first = client.post(route, content=payload, headers=operator()).json()
+    retry = client.post(route, content=payload, headers=operator()).json()
+    assert retry["duplicate"] is True and retry["visit"] == first["visit"]
+    wrong = UnlockRequest(command_id="wrong-test", event_id="interface-002",
+                          badge_id="badge-001", device_id="other-device")
+    assert client.post("/api/v1/unlock-commands", content=wrong.model_dump_json(), headers=operator()).status_code == 409
+    assert client.get("/api/v1/unlock-commands", headers=operator()).json() == []
+    tested = client.get("/api/v1/activity?source=interface_test", headers=operator()).json()
+    assert tested["progress"] is None
+    assert tested["map"]["sites"][0]["recent_unique_badges"] == 1
+
+
 def test_terminal_switch_preserves_old_event_and_offline_config(client: TestClient) -> None:
     register(client)
     first = post_scan(client, scan())

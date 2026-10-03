@@ -18,6 +18,7 @@ class Contract(BaseModel):
 class Source(StrEnum):
     PHYSICAL = "physical_scan_simulated_site"
     GENERATED = "generated_simulation"
+    INTERFACE_TEST = "interface_test"
 
 
 class BadgeRegistration(Contract):
@@ -35,6 +36,12 @@ class ScanRequest(Contract):
     config_version: Annotated[int, Field(ge=1)]
     captured_at: AwareDatetime
     time_quality: Literal["synced", "untrusted"]
+
+
+class InterfaceTestScanRequest(ScanRequest):
+    terminal_id: Literal["interface-test-001"]
+    site_id: Literal["A"]
+    config_version: Literal[1]
 
 
 class Visit(Contract):

@@ -9,7 +9,7 @@ from pathlib import Path
 import sqlite3
 
 from .models import (
-    BadgeRegistration, ScanRequest, ScanResponse, Source, TerminalConfiguration,
+    BadgeRegistration, ScanRequest, ScanResponse, Source, TerminalConfiguration, InterfaceTestScanRequest,
     UnlockCommand, UnlockRequest, Visit, HeartbeatReceipt, TerminalHeartbeat, DeviceProgressSummary,
 )
 
@@ -84,9 +84,9 @@ class Repository:
     @staticmethod
     def scan_response(visit: Visit, duplicate: bool) -> ScanResponse:
         return ScanResponse(visit=visit, duplicate=duplicate,
-                            can_unlock=visit.source == Source.PHYSICAL and visit.site_id == "A")
+                            can_unlock=visit.source in (Source.PHYSICAL, Source.INTERFACE_TEST) and visit.site_id == "A")
 
-    def scan(self, request: ScanRequest, now: datetime, source: Source = Source.PHYSICAL) -> ScanResponse:
+    def scan(self, request: ScanRequest | InterfaceTestScanRequest, now: datetime, source: Source = Source.PHYSICAL) -> ScanResponse:
         payload_hash = sha256((source + request.model_dump_json()).encode()).hexdigest()
         captured = request.captured_at.astimezone(timezone.utc)
         with self.connection(write=True) as db:
@@ -102,7 +102,10 @@ class Repository:
                 "SELECT site_id FROM terminal_configs WHERE terminal_id = ? AND config_version = ?",
                 (request.terminal_id, request.config_version),
             ).fetchone()
-            if not config or config["site_id"] != request.site_id:
+            if source == Source.INTERFACE_TEST:
+                if (request.terminal_id, request.site_id, request.config_version) != ("interface-test-001", "A", 1):
+                    raise BusinessError(409, "测试记录必须使用专用接口测试身份与 A 点")
+            elif not config or config["site_id"] != request.site_id:
                 raise BusinessError(409, "终端地点与配置版本不匹配")
             if request.time_quality == "synced" and captured > now + timedelta(seconds=30):
                 raise BusinessError(422, "采集时间超出允许的时钟偏差")
@@ -270,7 +273,7 @@ class Repository:
                 raise BusinessError(404, "到访或腰牌不存在")
             if visit["badge_id"] != request.badge_id or badge["device_id"] != request.device_id:
                 raise BusinessError(409, "到访、腰牌与实物设备身份不一致")
-            if visit["source"] != Source.PHYSICAL:
+            if visit["source"] not in (Source.PHYSICAL, Source.INTERFACE_TEST):
                 raise BusinessError(403, "模拟数据不能控制实物腰牌")
             if visit["site_id"] != "A":
                 raise BusinessError(409, "该地点游戏尚未实现")
