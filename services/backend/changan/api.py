@@ -22,6 +22,7 @@ from .device_protocol import DeviceEnvelope, DeviceKey, DeviceKeys, DeviceReport
 from .device_service import DeviceService
 from .simulation import ScenarioRequest, ScenarioResult, simulate
 from .catalog import SiteCatalog, default_catalog
+from .deepseek import load_deepseek
 from .recommendations import RecommendationAudit, RecommendationModel, RecommendationRecord, RecommendationRejection, RecommendationRequest, RecommendationResult, RecommendationService
 
 
@@ -170,10 +171,16 @@ def create_app(db_path: Path, operator_token: str, terminal_token: str,
 
 
 def create_app_from_environment() -> FastAPI:
+    enabled = os.environ.get("CHANGAN_DEEPSEEK_ENABLED", "1")
+    if enabled not in ("0", "1"):
+        raise ValueError("CHANGAN_DEEPSEEK_ENABLED 只允许0或1")
+    model_path = os.environ.get("CHANGAN_DEEPSEEK_KEY_PATH")
+    model = None if enabled == "0" else load_deepseek(Path(model_path or "data/deepseek.env"), required=model_path is not None)
     keys_path = os.environ.get("CHANGAN_DEVICE_KEYS_PATH")
     keys = () if not keys_path else tuple(DeviceKeys.model_validate_json(Path(keys_path).read_text()).devices)
     catalog_path = os.environ.get("CHANGAN_SITE_CATALOG_PATH")
     catalog = None if not catalog_path else SiteCatalog.model_validate_json(Path(catalog_path).read_text())
     return create_app(Path(os.environ.get("CHANGAN_DB_PATH", "data/changan.sqlite3")),
                       os.environ.get("CHANGAN_OPERATOR_TOKEN", ""),
-                      os.environ.get("CHANGAN_TERMINAL_TOKEN", ""), device_keys=keys, site_catalog=catalog)
+                      os.environ.get("CHANGAN_TERMINAL_TOKEN", ""), device_keys=keys, site_catalog=catalog,
+                      recommendation_model=model)

@@ -12,6 +12,7 @@ export CHANGAN_TEST_WEB_ORIGIN="http://127.0.0.1:3101"
 export CHANGAN_PORT=8123
 export PORT=3101
 export CHANGAN_DEVICE_KEYS_PATH="${project_root}/services/web/tests/fixtures/device-keys.test.json"
+export CHANGAN_DEEPSEEK_ENABLED=0
 unset CHANGAN_PUBLIC_ORIGIN
 backend_pid=""
 web_pid=""

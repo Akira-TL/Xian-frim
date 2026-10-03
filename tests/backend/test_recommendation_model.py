@@ -1,11 +1,12 @@
 import asyncio
+import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import monotonic
 
 from fastapi.testclient import TestClient
-from pydantic import TypeAdapter
+from pydantic import BaseModel, SecretStr, TypeAdapter
 import httpx
 import pytest
 
@@ -20,6 +21,78 @@ class ValidModel:
         return ('{"snapshot_id":"' + snapshot.snapshot_id
                 + '","selected_site":"C","child_text":"下一站去诗意庭院看看吧。",'
                 '"operator_reason":"诗意庭院在本次候选中，可查看庭院文字内容。"}')
+
+
+class ExternalMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ExternalRequest(BaseModel):
+    model: str
+    messages: list[ExternalMessage]
+
+
+def test_deepseek_http_response_passes_through_real_recommendation_validation(tmp_path: Path) -> None:
+    from changan.deepseek import DeepSeekModel
+
+    async def provider(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == "https://api.deepseek.com/chat/completions"
+        assert request.headers["authorization"] == "Bearer test-only-key"
+        sent = ExternalRequest.model_validate_json(request.content)
+        assert sent.model == "deepseek-flash"
+        assert sent.messages[-1].role == "user"
+        snapshot = RecommendationInput.model_validate_json(sent.messages[-1].content)
+        assert snapshot.selected_visit_site == "A"
+        assert "test-only-key" not in sent.messages[-1].content
+        raw = await ValidModel().recommend(snapshot)
+        return httpx.Response(200, content='{"choices":[{"finish_reason":"stop","message":{"content":'
+                              + json.dumps(raw) + '}}]}')
+
+    model = DeepSeekModel(SecretStr("test-only-key"), transport=httpx.MockTransport(provider))
+    with TestClient(create_app(tmp_path / "deepseek.sqlite3", "operator-test", "terminal-test", lambda: NOW,
+                              recommendation_model=model)) as client:
+        register(client)
+        post_scan(client, scan())
+        refresh_site(client, "B")
+        refresh_site(client, "C")
+        response = client.post("/api/v1/recommendations",
+                               content='{"badge_id":"badge-001","event_id":"scan-001"}', headers=operator())
+        assert response.status_code == 200
+        result = RecommendationResult.model_validate_json(response.text)
+        assert result.source == "model" and result.selected_site == "C"
+        assert result.child_text == "下一站去诗意庭院看看吧。"
+        audit = client.get("/api/v1/recommendations/" + result.snapshot_id + "/audit", headers=operator())
+        assert RecommendationAudit.model_validate_json(audit.text).validation == "accepted"
+        assert "test-only-key" not in response.text + audit.text
+
+
+@pytest.mark.parametrize("fault", ["http", "redirect", "malformed", "oversize"])
+def test_deepseek_service_failures_do_not_leak_response_or_turn_into_success(tmp_path: Path, fault: str) -> None:
+    from changan.deepseek import DeepSeekModel
+
+    def provider(request: httpx.Request) -> httpx.Response:
+        if fault == "http":
+            return httpx.Response(401, content="PRIVATE_PROVIDER_DETAIL")
+        if fault == "redirect":
+            return httpx.Response(302, headers=[("Location", "https://outside.invalid")])
+        return httpx.Response(200, content="x" * 65537 if fault == "oversize" else "PRIVATE_PROVIDER_DETAIL")
+
+    model = DeepSeekModel(SecretStr("test-only-key"), transport=httpx.MockTransport(provider))
+    with TestClient(create_app(tmp_path / "deepseek-fault.sqlite3", "operator-test", "terminal-test", lambda: NOW,
+                              recommendation_model=model)) as client:
+        register(client)
+        post_scan(client, scan())
+        refresh_site(client, "B")
+        response = client.post("/api/v1/recommendations",
+                               content='{"badge_id":"badge-001","event_id":"scan-001"}', headers=operator())
+        assert response.status_code == 200
+        result = RecommendationResult.model_validate_json(response.text)
+        assert result.source == "rule_fallback" and result.fallback_reason == "unavailable"
+        audit = client.get("/api/v1/recommendations/" + result.snapshot_id + "/audit", headers=operator())
+        assert "PRIVATE_PROVIDER_DETAIL" not in response.text + audit.text
+        assert "test-only-key" not in response.text + audit.text
+        assert client.get("/api/v1/unlock-commands", headers=operator()).text == "[]"
 
 
 def test_valid_model_output_uses_its_candidate_not_rule_choice(tmp_path: Path) -> None:
