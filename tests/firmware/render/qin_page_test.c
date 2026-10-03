@@ -91,7 +91,7 @@ int main(void)
     page_vtable_t *table = exploration_create("exploration");
     table->on_view_load(&page);
     capture(display, "home");
-    click(page.root, "开始秦俑归阵");
+    click(page.root, "开始游戏");
     capture(display, "game");
     assert(begin_calls == 1);
     qin_result_t result;
@@ -139,7 +139,7 @@ int main(void)
     click(page.root, "退出");
     click(page.root, "设置");
     click(page.root, "返回");
-    assert(find_button(page.root, "开始秦俑归阵") != NULL && begin_calls == 1);
+    assert(find_button(page.root, "开始游戏") != NULL && begin_calls == 1);
     table->on_view_did_unload(&page);
     puts("通过：正式游戏页面设置返回保留碎片和亮边，首页返回正确，滑块仅松手保存；不替代实物触摸或NVS验收");
     return 0;

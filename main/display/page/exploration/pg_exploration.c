@@ -35,23 +35,38 @@ static void render(void);
 
 static void readable_text(lv_obj_t *object)
 {
-    // 使用完整中文字体并统一放大至约 27 像素，避免备用字形退到 14 像素。
+    // 正文约 23 像素；标题与主操作单独放大，避免长提示挤到圆屏边缘。
     lv_obj_set_style_text_font(object, &font_puhui_18_4, 0);
     lv_obj_set_style_transform_pivot_x(object, LV_PCT(50), 0);
     lv_obj_set_style_transform_pivot_y(object, LV_PCT(50), 0);
-    lv_obj_set_style_transform_scale_x(object, 384, 0);
-    lv_obj_set_style_transform_scale_y(object, 384, 0);
+    lv_obj_set_style_transform_scale_x(object, 320, 0);
+    lv_obj_set_style_transform_scale_y(object, 320, 0);
 }
 
 static lv_obj_t *label(const char *text, int y)
 {
     lv_obj_t *obj = lv_label_create(pg.root);
     readable_text(obj);
-    lv_obj_set_width(obj, 260);
+    lv_obj_set_width(obj, 224);
     lv_obj_set_style_text_align(obj, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(obj, LV_ALIGN_TOP_MID, 0, y);
     lv_label_set_text(obj, text);
     return obj;
+}
+
+static void title(const char *text)
+{
+    lv_obj_t *object = label(text, 40);
+    lv_obj_set_style_transform_scale_x(object, 384, 0);
+    lv_obj_set_style_transform_scale_y(object, 384, 0);
+    lv_obj_set_style_text_letter_space(object, 2, 0);
+}
+
+static void primary(lv_obj_t *object)
+{
+    lv_obj_set_style_bg_color(object, lv_color_hex(0x973e2d), 0);
+    lv_obj_set_style_border_color(object, lv_color_hex(0xc77953), 0);
+    lv_obj_set_style_border_width(object, 1, 0);
 }
 
 static lv_obj_t *button(const char *text, int x, int y, int width,
@@ -60,7 +75,12 @@ static lv_obj_t *button(const char *text, int x, int y, int width,
     lv_obj_t *obj = lv_button_create(pg.root);
     lv_obj_set_size(obj, width, 54);
     lv_obj_set_pos(obj, x, y);
-    lv_obj_set_style_bg_color(obj, lv_color_hex(0x694631), 0);
+    lv_obj_set_style_bg_color(obj, lv_color_hex(0x34332b), 0);
+    lv_obj_set_style_bg_color(obj, lv_color_hex(0x565044), LV_STATE_PRESSED);
+    lv_obj_set_style_border_color(obj, lv_color_hex(0x796247), 0);
+    lv_obj_set_style_border_width(obj, text ? 1 : 0, 0);
+    lv_obj_set_style_radius(obj, text ? 16 : 9, 0);
+    lv_obj_set_style_shadow_width(obj, 0, 0);
     lv_obj_set_style_pad_all(obj, 0, 0);
     if (callback) lv_obj_add_event_cb(obj, callback, LV_EVENT_CLICKED, (void *)value);
     if (text) {
@@ -147,6 +167,10 @@ static void setting_slider(int y, int minimum, int value, intptr_t kind)
     lv_obj_set_pos(slider, 90, y);
     lv_slider_set_range(slider, minimum, 100);
     lv_slider_set_value(slider, value, LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(slider, lv_color_hex(0x3e392e), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(slider, lv_color_hex(0xc4a574), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(slider, lv_color_hex(0xf5dfb6), LV_PART_KNOB);
+    lv_obj_set_style_pad_all(slider, 5, LV_PART_KNOB);
     // 松手才保存，避免拖动时频繁写入非易失性存储。
     lv_obj_add_event_cb(slider, save_setting, LV_EVENT_RELEASED, (void *)kind);
 }
@@ -168,7 +192,7 @@ static void place_piece(uint8_t piece, uint8_t slot)
             pg.hint_until = lv_tick_get() + 1200;
         }
     } else if (result == QIN_INVALID) {
-        pg.notice = "这里已有碎片，请重新拖放";
+        pg.notice = "已有碎片，换个位置";
     } else {
         pg.notice = "放对了！继续拼接";
     }
@@ -214,7 +238,7 @@ static void drag_piece(lv_event_t *event)
         pg.drag.origin = (lv_point_t){lv_obj_get_x(object), lv_obj_get_y(object)};
         pg.drag.moved = false;
         lv_obj_move_to_index(object, -1);
-        lv_label_set_text(pg.instruction, "拖到轮廓内，再松手");
+        lv_label_set_text(pg.instruction, "移入轮廓，再松手");
         return;
     }
     if (pg.drag.object != object) return;
@@ -249,7 +273,7 @@ static void drag_piece(lv_event_t *event)
     if (slot >= 0 && !(pg.puzzle.placed_mask & (1u << slot))) {
         place_piece(piece, (uint8_t)slot);
     } else {
-        pg.notice = "按住碎片，拖到对应轮廓";
+        pg.notice = "按住碎片，拖入轮廓";
         render();
     }
 }
@@ -273,12 +297,12 @@ static void render(void)
     pg.instruction = NULL;
     lv_obj_clean(pg.root);
     if (pg.view == VIEW_SETTINGS) {
-        label("游戏设置", 45);
+        title("游戏设置");
         label("亮度", 100);
         setting_slider(145, 10, ui_tool_get_brightness(), 0);
         label("音量", 190);
         setting_slider(235, 0, ui_tool_get_volume(), 1);
-        button("返回", 110, 280, 140, close_settings, 0);
+        primary(button("返回", 110, 278, 140, close_settings, 0));
         return;
     }
     if (exploration_get(&pg.progress, &pg.puzzle, NULL) != ESP_OK) {
@@ -286,7 +310,7 @@ static void render(void)
         button("设置", 110, 220, 140, open_settings, 0);
         return;
     }
-    label(pg.view == VIEW_GAME ? "秦俑归阵" : "长安游迹", 45);
+    title(pg.view == VIEW_GAME ? "秦俑归阵" : "长安游迹");
     if (pg.view == VIEW_GAME) {
         const int piece_x[] = {48, 240, 48};
         const int piece_y[] = {176, 110, 110};
@@ -310,14 +334,15 @@ static void render(void)
                 fragment(piece, i);
             }
         }
-        pg.instruction = label(pg.notice ? pg.notice : "按住碎片，拖到对应轮廓", 244);
-        button("退出", 70, 280, 106, navigate, VIEW_HOME);
-        button("设置", 184, 280, 106, open_settings, 0);
+        pg.instruction = label(pg.notice ? pg.notice : "按住碎片，拖入轮廓", 244);
+        button("退出", 78, 280, 98, navigate, VIEW_HOME);
+        button("设置", 184, 280, 98, open_settings, 0);
     } else if (pg.view == VIEW_COLLECTION || pg.view == VIEW_EXHIBIT) {
         if (pg.progress.collected) {
             lv_obj_t *art = button(NULL, 80, 80, 200, navigate, VIEW_COLLECTION);
             lv_obj_set_height(art, 160);
             lv_obj_set_style_bg_opa(art, LV_OPA_TRANSP, 0);
+            lv_obj_set_style_border_width(art, 0, 0);
             lv_obj_clear_flag(art, LV_OBJ_FLAG_SCROLLABLE);
             if (!qin_art_add(art, QIN_ART_REWARD, 200, 160)) {
                 for (unsigned i = 0; i < 3; ++i) {
@@ -331,21 +356,27 @@ static void render(void)
             }
             label(pg.notice ? pg.notice : "秦俑守护", 240);
             if (pg.view == VIEW_COLLECTION)
-                button("设为展示", 80, 276, 200, exhibit, 0);
+                primary(button("设为展示", 90, 276, 180, exhibit, 0));
             else
                 button("首页", 110, 276, 140, navigate, VIEW_HOME);
         } else {
-            label("通关后收藏秦俑奖励", 140);
+            label("完成游戏，收藏秦俑", 140);
             button("首页", 110, 260, 140, navigate, VIEW_HOME);
         }
     } else {
-        label(pg.notice ? pg.notice : (pg.progress.unlocked ? "秦俑工坊已解锁" : "到点后出示背面二维码"), 100);
-        lv_obj_t *play = button(pg.progress.completed ? "重玩秦俑归阵" : "开始秦俑归阵", 70, 148, 220, navigate, VIEW_GAME);
+        lv_obj_t *status = label(pg.notice ? pg.notice : (pg.progress.unlocked ? "秦俑工坊 · 已解锁" : "到点出示背面二维码"), 88);
+        lv_obj_set_style_text_color(status, lv_color_hex(0xc4ae87), 0);
+        lv_obj_t *play = button(pg.progress.completed ? "再玩一次" : "开始游戏", 70, 135, 220, navigate, VIEW_GAME);
+        lv_obj_set_height(play, 64);
+        primary(play);
+        lv_obj_t *caption = lv_obj_get_child(play, 0);
+        lv_obj_set_style_transform_scale_x(caption, 384, 0);
+        lv_obj_set_style_transform_scale_y(caption, 384, 0);
         if (!pg.progress.unlocked) lv_obj_add_state(play, LV_STATE_DISABLED);
-        button("收藏", 70, 214, 106, navigate, VIEW_COLLECTION);
-        button("设置", 184, 214, 106, open_settings, 0);
+        button("收藏", 78, 215, 98, navigate, VIEW_COLLECTION);
+        button("设置", 184, 215, 98, open_settings, 0);
         if (pg.progress.exhibiting)
-            button("展示", 110, 280, 140, navigate, VIEW_EXHIBIT);
+            button("展示", 110, 283, 140, navigate, VIEW_EXHIBIT);
     }
 }
 
@@ -375,7 +406,7 @@ static void load(page_base_t *self)
     pg.hint_until = 0;
     lv_obj_remove_style_all(pg.root);
     lv_obj_set_size(pg.root, 360, 360);
-    lv_obj_set_style_bg_color(pg.root, lv_color_hex(0x211c18), 0);
+    lv_obj_set_style_bg_color(pg.root, lv_color_hex(0x20251f), 0);
     lv_obj_set_style_bg_opa(pg.root, LV_OPA_COVER, 0);
     lv_obj_set_style_text_color(pg.root, lv_color_hex(0xffecd6), 0);
     lv_obj_set_style_text_font(pg.root, &font_puhui_18_4, 0);
