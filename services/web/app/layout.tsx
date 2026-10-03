@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "长安游迹 · 工作人员",
-  description: "核对腰牌身份，发送授权并验证设备执行回执。",
+  title: "长安游迹",
+  description: "连接你的腰牌，探索长安，收藏秦俑守护。",
   robots: { index: false, follow: false },
 };
 
