@@ -15,6 +15,16 @@ static struct {
     const char *notice;
     int8_t hint_piece;
     uint32_t hint_until;
+    lv_obj_t *slots[3];
+    lv_obj_t *instruction;
+    struct {
+        lv_obj_t *object;
+        lv_point_t start;
+        lv_point_t offset;
+        lv_point_t origin;
+        uint8_t piece;
+        bool moved;
+    } drag;
 } pg;
 
 static void render(void);
@@ -48,7 +58,7 @@ static lv_obj_t *button(const char *text, int x, int y, int width,
     lv_obj_set_pos(obj, x, y);
     lv_obj_set_style_bg_color(obj, lv_color_hex(0x694631), 0);
     lv_obj_set_style_pad_all(obj, 0, 0);
-    lv_obj_add_event_cb(obj, callback, LV_EVENT_CLICKED, (void *)value);
+    if (callback) lv_obj_add_event_cb(obj, callback, LV_EVENT_CLICKED, (void *)value);
     if (text) {
         lv_obj_t *caption = lv_label_create(obj);
         readable_text(caption);
@@ -106,20 +116,12 @@ static void return_settings(lv_event_t *event)
     page_change("app_list");
 }
 
-static void select_piece(lv_event_t *event)
+static void place_piece(uint8_t piece, uint8_t slot)
 {
     qin_result_t result;
-    esp_err_t error = exploration_select((uint8_t)(intptr_t)lv_event_get_user_data(event), &result);
-    pg.notice = error == ESP_OK && result == QIN_PLACED ? "再点击对应的轮廓" : "请重新选择";
-    render();
-}
-
-static void place_piece(lv_event_t *event)
-{
-    qin_result_t result;
-    esp_err_t error = exploration_place((uint8_t)(intptr_t)lv_event_get_user_data(event), &result);
+    esp_err_t error = exploration_place(slot, &result);
     if (error != ESP_OK) {
-        pg.notice = "保存失败，请再点一次";
+        pg.notice = "保存失败，请重新拖放";
     } else if (result == QIN_COMPLETED || result == QIN_REPLAY_COMPLETED) {
         pg.view = VIEW_COLLECTION;
         pg.notice = result == QIN_COMPLETED ? "通关！奖励已收藏" : "再次完成，不重复发奖";
@@ -127,15 +129,90 @@ static void place_piece(lv_event_t *event)
         pg.notice = "看看轮廓，再试一次";
         qin_puzzle_t current;
         if (exploration_get(NULL, &current, NULL) == ESP_OK && current.mistakes >= 2) {
-            pg.hint_piece = pg.puzzle.selected_piece;
+            pg.hint_piece = (int8_t)piece;
             pg.hint_until = lv_tick_get() + 1200;
         }
     } else if (result == QIN_INVALID) {
-        pg.notice = "先选碎片，再选轮廓";
+        pg.notice = "这里已有碎片，请重新拖放";
     } else {
         pg.notice = "放对了！继续拼接";
     }
     render();
+}
+
+static int drop_slot(const lv_point_t *point)
+{
+    for (unsigned i = 0; i < 3; ++i) {
+        lv_area_t bounds;
+        lv_obj_get_coords(pg.slots[i], &bounds);
+        if (point->x >= bounds.x1 && point->x <= bounds.x2 &&
+            point->y >= bounds.y1 && point->y <= bounds.y2) return (int)i;
+    }
+    return -1;
+}
+
+static void drag_piece(lv_event_t *event)
+{
+    lv_event_code_t code = lv_event_get_code(event);
+    if (code != LV_EVENT_PRESSED && code != LV_EVENT_PRESSING &&
+        code != LV_EVENT_RELEASED && code != LV_EVENT_PRESS_LOST) return;
+    lv_obj_t *object = lv_event_get_target(event);
+    lv_indev_t *input = lv_event_get_indev(event);
+    if (!input || lv_indev_get_type(input) != LV_INDEV_TYPE_POINTER) return;
+    lv_point_t point;
+    lv_indev_get_point(input, &point);
+
+    if (code == LV_EVENT_PRESSED) {
+        qin_result_t result;
+        uint8_t piece = (uint8_t)(intptr_t)lv_event_get_user_data(event);
+        if (exploration_select(piece, &result) != ESP_OK || result != QIN_PLACED) return;
+        lv_area_t bounds;
+        lv_obj_get_coords(object, &bounds);
+        pg.drag.object = object;
+        pg.drag.piece = piece;
+        pg.drag.start = point;
+        pg.drag.offset = (lv_point_t){point.x - bounds.x1, point.y - bounds.y1};
+        pg.drag.origin = (lv_point_t){lv_obj_get_x(object), lv_obj_get_y(object)};
+        pg.drag.moved = false;
+        lv_obj_move_to_index(object, -1);
+        lv_label_set_text(pg.instruction, "拖到轮廓内，再松手");
+        return;
+    }
+    if (pg.drag.object != object) return;
+    if (code == LV_EVENT_PRESSING) {
+        int32_t dx = point.x - pg.drag.start.x;
+        int32_t dy = point.y - pg.drag.start.y;
+        if (dx * dx + dy * dy >= 36) pg.drag.moved = true;
+        if (!pg.drag.moved) return;
+        lv_area_t root;
+        lv_obj_get_coords(pg.root, &root);
+        // 保留按下位置相对碎片的偏移，避免刚按住就跳到手指中心。
+        int32_t x = point.x - root.x1 - pg.drag.offset.x;
+        int32_t y = point.y - root.y1 - pg.drag.offset.y;
+        int32_t max_x = lv_obj_get_width(pg.root) - lv_obj_get_width(object);
+        int32_t max_y = lv_obj_get_height(pg.root) - lv_obj_get_height(object);
+        x = x < 0 ? 0 : (x > max_x ? max_x : x);
+        y = y < 0 ? 0 : (y > max_y ? max_y : y);
+        lv_obj_set_pos(object, x, y);
+        int hovered = drop_slot(&point);
+        for (unsigned i = 0; i < 3; ++i) {
+            lv_obj_set_style_border_color(pg.slots[i], lv_color_hex(
+                hovered == (int)i ? 0xffdc75 : 0xb59573), 0);
+        }
+        return;
+    }
+
+    // 失去按压只取消；点击、拖到轮廓外、松在已有碎片上均不得放置。
+    int slot = code == LV_EVENT_RELEASED && pg.drag.moved ? drop_slot(&point) : -1;
+    uint8_t piece = pg.drag.piece;
+    lv_obj_set_pos(object, pg.drag.origin.x, pg.drag.origin.y);
+    pg.drag.object = NULL;
+    if (slot >= 0 && !(pg.puzzle.placed_mask & (1u << slot))) {
+        place_piece(piece, (uint8_t)slot);
+    } else {
+        pg.notice = "按住碎片，拖到对应轮廓";
+        render();
+    }
 }
 
 static void exhibit(lv_event_t *event)
@@ -153,6 +230,8 @@ static void exhibit(lv_event_t *event)
 static void render(void)
 {
     if (!pg.root) return;
+    pg.drag.object = NULL;
+    pg.instruction = NULL;
     lv_obj_clean(pg.root);
     if (exploration_get(&pg.progress, &pg.puzzle, NULL) != ESP_OK) {
         label("进度存储不可用", 130);
@@ -164,7 +243,9 @@ static void render(void)
         const int piece_x[] = {48, 240, 48};
         const int piece_y[] = {176, 110, 110};
         for (unsigned i = 0; i < 3; ++i) {
-            lv_obj_t *slot = button(NULL, 144, 88 + (int)i * 48, 72, place_piece, i);
+            lv_obj_t *slot = button(NULL, 144, 88 + (int)i * 48, 72, NULL, 0);
+            pg.slots[i] = slot;
+            lv_obj_clear_flag(slot, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
             lv_obj_set_height(slot, 46);
             lv_obj_set_style_border_width(slot, 2, 0);
             lv_obj_set_style_border_color(slot, lv_color_hex(0xb59573), 0);
@@ -178,15 +259,15 @@ static void render(void)
                     lv_obj_set_style_border_color(slot, lv_color_hex(0xffdc75), 0);
                     lv_obj_set_style_border_width(slot, 4, 0);
                 }
-                lv_obj_t *piece = button(NULL, piece_x[i], piece_y[i], 72, select_piece, i);
+                lv_obj_t *piece = button(NULL, piece_x[i], piece_y[i], 72, NULL, 0);
+                // 保持按压归属，手指离开原位置后仍收到移动与松手事件。
+                lv_obj_add_flag(piece, LV_OBJ_FLAG_PRESS_LOCK);
+                lv_obj_clear_flag(piece, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
+                lv_obj_add_event_cb(piece, drag_piece, LV_EVENT_ALL, (void *)(intptr_t)i);
                 fragment(piece, i);
-                if (pg.puzzle.selected_piece == (int8_t)i) {
-                    lv_obj_set_style_border_width(piece, 3, 0);
-                    lv_obj_set_style_border_color(piece, lv_color_hex(0xffdc75), 0);
-                }
             }
         }
-        label(pg.notice ? pg.notice : "先选碎片，再选轮廓", 244);
+        pg.instruction = label(pg.notice ? pg.notice : "按住碎片，拖到对应轮廓", 244);
         button("退出", 110, 280, 140, navigate, VIEW_HOME);
     } else if (pg.view == VIEW_COLLECTION || pg.view == VIEW_EXHIBIT) {
         if (pg.progress.collected) {
@@ -226,6 +307,8 @@ static void render(void)
 static void poll(lv_timer_t *timer)
 {
     (void)timer;
+    // 定时提示及远程进度不能在拖动中删掉手指正在操作的对象。
+    if (pg.drag.object) return;
     if (pg.hint_until && (int32_t)(lv_tick_get() - pg.hint_until) >= 0) {
         pg.hint_until = 0;
         render();
@@ -261,6 +344,8 @@ static void unload(page_base_t *self)
     (void)self;
     if (pg.timer) lv_timer_delete(pg.timer);
     pg.timer = NULL;
+    pg.drag.object = NULL;
+    pg.instruction = NULL;
     pg.root = NULL;
 }
 
