@@ -12,6 +12,7 @@ dependencies = [
 
 [dependency-groups]
 dev = ["pytest>=8,<10"]
+assets = ["pypng>=0.20220715.0", "lz4>=4,<5"]
 
 [tool.pytest.ini_options]
 pythonpath = ["services/backend"]

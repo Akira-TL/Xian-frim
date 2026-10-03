@@ -43,6 +43,15 @@ list(FILTER DISPLAY_SOURCES EXCLUDE REGEX ".*/alarm_setting/.*")
 list(APPEND SOURCES ${DISPLAY_SOURCES})
 list(APPEND SOURCES ${SERVICES_SOURCES})
 
+# tools/build.sh 将用户提供的秦俑 PNG 转成 LVGL 官方格式，生成文件只放构建目录。
+set(QIN_ASSET_DIR "${CMAKE_BINARY_DIR}/qin-assets")
+if(EXISTS "${QIN_ASSET_DIR}/qin_assets_generated.h")
+    list(APPEND INCLUDE_DIRS "${QIN_ASSET_DIR}")
+    foreach(QIN_ART_NAME head body legs reward)
+        list(APPEND SOURCES "${QIN_ASSET_DIR}/qin_${QIN_ART_NAME}.c")
+    endforeach()
+endif()
+
 # Only compile the common modules used by this single-board firmware.
 # Avoid pulling cellular/camera/PMIC helpers from the multi-board upstream tree.
 set(BOARD_COMMON_SOURCES

@@ -1,6 +1,7 @@
 #include "lvgl.h"
 #include "cl_ui.h"
 #include "services/exploration/exploration.h"
+#include "qin_art.h"
 #include <stdint.h>
 
 LV_FONT_DECLARE(font_puhui_18_4)
@@ -83,6 +84,7 @@ static void shape(lv_obj_t *parent, int x, int y, int width, int height, int rad
 
 static void fragment(lv_obj_t *parent, unsigned piece)
 {
+    if (qin_art_add(parent, (qin_art_id_t)piece, 72, 46)) return;
     if (piece == 0) {
         shape(parent, 24, 5, 24, 32, 10);
         shape(parent, 16, 4, 40, 10, 3);
@@ -271,19 +273,20 @@ static void render(void)
         button("退出", 110, 280, 140, navigate, VIEW_HOME);
     } else if (pg.view == VIEW_COLLECTION || pg.view == VIEW_EXHIBIT) {
         if (pg.progress.collected) {
-            lv_obj_t *art = button(NULL, 144, 90, 72, navigate, VIEW_COLLECTION);
-            lv_obj_set_height(art, 142);
-            fragment(art, 0);
-            lv_obj_t *body = lv_obj_create(art);
-            lv_obj_remove_style_all(body);
-            lv_obj_set_pos(body, 0, 46);
-            lv_obj_set_size(body, 72, 96);
-            fragment(body, 1);
-            lv_obj_t *legs = lv_obj_create(body);
-            lv_obj_remove_style_all(legs);
-            lv_obj_set_pos(legs, 0, 46);
-            lv_obj_set_size(legs, 72, 48);
-            fragment(legs, 2);
+            lv_obj_t *art = button(NULL, 80, 80, 200, navigate, VIEW_COLLECTION);
+            lv_obj_set_height(art, 160);
+            lv_obj_set_style_bg_opa(art, LV_OPA_TRANSP, 0);
+            lv_obj_clear_flag(art, LV_OBJ_FLAG_SCROLLABLE);
+            if (!qin_art_add(art, QIN_ART_REWARD, 200, 160)) {
+                for (unsigned i = 0; i < 3; ++i) {
+                    lv_obj_t *part = lv_obj_create(art);
+                    lv_obj_remove_style_all(part);
+                    lv_obj_set_pos(part, 64, 9 + (int)i * 46);
+                    lv_obj_set_size(part, 72, 46);
+                    lv_obj_clear_flag(part, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+                    fragment(part, i);
+                }
+            }
             label(pg.notice ? pg.notice : "秦俑守护", 240);
             if (pg.view == VIEW_COLLECTION)
                 button("设为展示", 80, 276, 200, exhibit, 0);

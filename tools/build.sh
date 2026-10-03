@@ -11,6 +11,7 @@ if ! command -v idf.py >/dev/null 2>&1; then
 fi
 
 cd "${ROOT_DIR}"
+bash scripts/assets/prepare-qin-assets.sh "${BUILD_DIR}" "${QIN_ASSET_SOURCE_DIR:-${ROOT_DIR}/assets/qin}"
 idf.py \
     -B "${BUILD_DIR}" \
     -DSDKCONFIG="${BUILD_DIR}/sdkconfig" \
