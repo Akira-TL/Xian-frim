@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { api } from "../lib/api";
-import type { Badge, DeviceState, Visit } from "../lib/contracts";
+import type { Badge, BadgeRuntime, DeviceState, Visit } from "../lib/contracts";
 import { BadgeControl } from "../lib/badge-control";
 import { bluetoothSupport, connectBadge } from "../lib/web-bluetooth";
 import VisitorRecommendation from "./visitor-recommendation";
@@ -18,6 +18,8 @@ import SyncRounded from "@mui/icons-material/SyncRounded";
 
 const siteNames = { A: "秦俑工坊", B: "长安城门", C: "诗意庭院" };
 type Tab = "explore" | "collection" | "route";
+const screenNames = {cover: "入口封面", selection: "选择游戏", intro: "准备开始", playing: "正在拼接",
+  result: "拼接完成", collection: "查看收藏", exhibit: "展示收藏", settings: "调整设置"};
 export default function OperatorPanel() {
   const [badges, setBadges] = useState<Badge[]>([]);
   const [visits, setVisits] = useState<Visit[]>([]);
@@ -27,6 +29,7 @@ export default function OperatorPanel() {
   const [busy, setBusy] = useState(false);
   const [connected, setConnected] = useState(false);
   const [progress, setProgress] = useState<DeviceState>();
+  const [runtime, setRuntime] = useState<BadgeRuntime>();
   const [notice, setNotice] = useState("");
   const [unsupported, setUnsupported] = useState<string>();
   const control = useRef<BadgeControl | undefined>(undefined);
@@ -37,7 +40,7 @@ export default function OperatorPanel() {
     .sort((a, b) => Date.parse(b.captured_at) - Date.parse(a.captured_at))[0];
   function disconnect() {
     generation.current += 1; control.current?.close(); control.current = undefined;
-    setConnected(false); setProgress(undefined);
+    setConnected(false); setProgress(undefined); setRuntime(undefined);
   }
   const refresh = useCallback(async () => {
     const [registered, arrived] = await Promise.all([api.badges(), api.visits()]);
@@ -50,6 +53,36 @@ export default function OperatorPanel() {
     load(); const timer = setInterval(load, 5000);
     return () => { active = false; clearInterval(timer); generation.current += 1; control.current?.close(); };
   }, [refresh]);
+  useEffect(() => {
+    if (!connected) return;
+    const current = generation.current;
+    let stopped = false;
+    let polls = 0;
+    const poll = async () => {
+      const session = control.current;
+      if (stopped || document.hidden || locked.current || !session) return;
+      locked.current = true;
+      try {
+        const live = await session.runtime();
+        if (stopped || current !== generation.current) return;
+        setRuntime(live);
+        // 只有签名认证回读才能更新完成／收藏，不使用实时消息直接点亮进度。
+        if (++polls % 3 === 0 || live?.screen === "result") {
+          const verified = await session.sync();
+          if (!stopped && current === generation.current) setProgress(verified);
+        }
+      } catch {
+        if (!stopped && current === generation.current) {
+          generation.current += 1; session.close(); control.current = undefined;
+          setConnected(false); setProgress(undefined); setRuntime(undefined);
+          setNotice("连接已断开，请重新连接");
+        }
+      } finally { locked.current = false; }
+    };
+    void poll();
+    const timer = setInterval(() => { void poll(); }, 2000);
+    return () => { stopped = true; clearInterval(timer); };
+  }, [connected]);
   async function connect() {
     if (!badge) throw new Error("请先选择腰牌");
     disconnect(); const current = generation.current;
@@ -97,6 +130,13 @@ export default function OperatorPanel() {
       <ol className="visitor-steps">{steps.map(step => <li key={step.name}>
         <span className={`visitor-step-icon ${step.done ? "is-complete" : ""}`} role="img" aria-label={`${step.name}${step.done ? "已完成" : "未确认"}`}><step.Icon />{step.done && <CheckCircleRounded className="visitor-step-check" />}</span><span>{step.name}</span>
       </li>)}</ol>
+      {runtime?.screen && <div className="visitor-runtime" aria-live="polite">
+        <Image src={runtime.screen === "cover" ? "/xks/images/journey-cover-v1.webp" : "/xks/images/qin-guardian-v3.webp"}
+          width={48} height={48} alt="" />
+        <div><strong>{runtime.screen === "cover" || runtime.screen === "selection" ? "长安游迹" : "秦俑归阵"}</strong>
+          <span>{screenNames[runtime.screen]}{runtime.screen === "playing" ? ` · ${[0, 1, 2].filter(bit => ((runtime.placed_mask ?? 0) & (1 << bit)) !== 0).length}/3` : ""}</span></div>
+        <span className="visitor-live-label">实时</span>
+      </div>}
       {connected && !progress?.unlocked && latestVisit?.site_id === "A" && <button className="visitor-primary visitor-unlock" disabled={busy || !online}
         onClick={() => void operate(() => sync(true))}>解锁秦俑归阵{latestVisit.source === "interface_test" ? "（演示）" : ""}</button>}
       {(notice || unsupported || !online) && <p className="visitor-notice" role="status">{unsupported || notice || "网络暂不可用"}</p>}

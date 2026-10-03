@@ -1,4 +1,5 @@
 import type { BadgeLink } from "./badge-control.ts";
+import { badgeRuntimeSchema } from "./contracts.ts";
 
 const advertisedService = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
 const activityService = "5e994001-64aa-4a10-b1f1-78ce02b3974f";
@@ -29,6 +30,7 @@ export async function connectBadge(onDisconnect: () => void): Promise<BadgeLink>
     await device.gatt!.connect(); live();
     const service = await device.gatt!.getPrimaryService(activityService); live();
     const identity = await service.getCharacteristic(characteristic("2")); live();
+    const snapshot = await service.getCharacteristic(characteristic("3")); live();
     const nonce = await service.getCharacteristic(characteristic("4")); live();
     const control = await service.getCharacteristic(characteristic("5")); live();
     const reply = await service.getCharacteristic(characteristic("6")); live();
@@ -47,6 +49,12 @@ export async function connectBadge(onDisconnect: () => void): Promise<BadgeLink>
         const value = await read(nonce);
         if (value.length !== 16) throw new Error("设备随机数长度错误");
         return value;
+      },
+      async snapshot() {
+        const value = badgeRuntimeSchema.parse(JSON.parse(
+          new TextDecoder("utf-8", { fatal: true }).decode(await read(snapshot))));
+        // 旧固件仍可认证同步，但不编造旧固件没有提供的界面状态。
+        return value.screen === undefined ? undefined : value;
       },
       async write(packet) {
         live();

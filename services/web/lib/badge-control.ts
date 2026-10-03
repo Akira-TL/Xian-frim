@@ -1,11 +1,12 @@
 import type { createApi } from "./api.ts";
-import { stateSchema, type Badge, type DeviceState, type Envelope, type Visit } from "./contracts.ts";
+import { badgeRuntimeSchema, stateSchema, type Badge, type BadgeRuntime, type DeviceState, type Envelope, type Visit } from "./contracts.ts";
 
 export interface BadgeLink {
   identity(): Promise<string>;
   nonce(): Promise<Uint8Array>;
   write(packet: Uint8Array): Promise<void>;
   reply(): Promise<Uint8Array>;
+  snapshot?(): Promise<BadgeRuntime | undefined>;
   close(): void;
 }
 export type ControlPhase = "checking" | "authorizing" | "sending" | "sent" | "verifying" | "confirmed";
@@ -38,7 +39,7 @@ export class BadgeControl {
   private async step<T>(operation: () => Promise<T>): Promise<T> {
     this.live(); const value = await operation(); this.live(); return value;
   }
-  private async run(operation: () => Promise<DeviceState>): Promise<DeviceState> {
+  private async run<T>(operation: () => Promise<T>): Promise<T> {
     this.live();
     if (this.busy) throw new Error("上一项操作尚未结束，请勿并发发送");
     this.busy = true;
@@ -49,6 +50,20 @@ export class BadgeControl {
     try { return await Promise.race([operation(), timeout]); }
     catch (error) { this.close(); throw error; }
     finally { if (timer) clearTimeout(timer); this.busy = false; }
+  }
+
+  async runtime(): Promise<BadgeRuntime | undefined> {
+    return this.run(async () => {
+      if (!this.synced) throw new Error("请先认证同步当前设备进度");
+      if (await this.step(() => this.link.identity()) !== this.badge.device_id)
+        throw new Error("实物身份与当前腰牌不一致");
+      if (!this.link.snapshot) return undefined;
+      const snapshot = await this.step(() => this.link.snapshot!());
+      if (!snapshot) return undefined;
+      const value = badgeRuntimeSchema.parse(snapshot);
+      if (value.device_id !== this.badge.device_id) throw new Error("实时界面信息来自其他设备");
+      return value;
+    });
   }
 
   private async exchange(envelope: Envelope, commandId?: string): Promise<DeviceState> {

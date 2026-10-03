@@ -33,6 +33,21 @@ export type Command = z.infer<typeof commandSchema>;
 export type DeviceState = z.infer<typeof stateSchema>;
 export type Envelope = z.infer<typeof envelopeSchema>;
 
+// 蓝牙实时界面信息与后台签名认证进度分开，不参与统计和模型输入。
+export const badgeRuntimeSchema = z.strictObject({
+  v: z.literal(1), device_id: z.string().regex(/^esp32s3-[0-9a-f]{12}$/),
+  session_id: z.literal("demo-001"), game_id: z.literal("qin_formation"),
+  unlocked: z.boolean(), completed: z.boolean(), collected: z.boolean(), exhibiting: z.boolean(),
+  screen: z.enum(["cover", "selection", "intro", "playing", "result", "collection", "exhibit", "settings"]).optional(),
+  placed_mask: z.number().int().min(0).max(7).optional(),
+  mistakes: z.number().int().min(0).max(255).optional(),
+}).refine(value => value.completed === value.collected && (!value.completed || value.unlocked)
+  && (!value.exhibiting || value.collected)
+  && ((value.screen === undefined && value.placed_mask === undefined && value.mistakes === undefined)
+    || (value.screen !== undefined && value.placed_mask !== undefined && value.mistakes !== undefined)),
+"设备实时界面信息不完整或违反进度约束");
+export type BadgeRuntime = z.infer<typeof badgeRuntimeSchema>;
+
 export const sourceSchema = z.enum(["physical_scan_simulated_site", "generated_simulation", "interface_test"]);
 const siteId = z.enum(["A", "B", "C"]);
 const count = z.number().int().nonnegative();

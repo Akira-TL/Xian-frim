@@ -3,7 +3,7 @@ import { createHmac } from "node:crypto";
 import { test } from "node:test";
 import { createApi } from "../lib/api.ts";
 import { BadgeControl, type BadgeLink } from "../lib/badge-control.ts";
-import { visitSchema, type Badge, type Visit } from "../lib/contracts.ts";
+import { badgeRuntimeSchema, visitSchema, type Badge, type BadgeRuntime, type Visit } from "../lib/contracts.ts";
 
 const web = process.env.CHANGAN_TEST_WEB_ORIGIN;
 const backend = process.env.CHANGAN_BACKEND_ORIGIN;
@@ -19,6 +19,8 @@ class TestBadge implements BadgeLink {
   packet: Uint8Array = new Uint8Array();
   onReply?: () => Promise<void>;
   corruptReply = false;
+  view: BadgeRuntime | undefined;
+  async snapshot() { return this.view; }
   constructor(deviceId: string) { this.deviceId = deviceId; }
   async identity() { return this.deviceId; }
   async nonce() { return new Uint8Array(16).fill(0x22); }
@@ -149,4 +151,40 @@ test("同一连接不能并发同步与解锁，拒绝并发不会破坏正在�
   link.onReply = async () => { await assert.rejects(control.sync(), /并发/); };
   assert.equal((await control.unlock(visit)).unlocked, true);
   assert.deepEqual(link.writes.map(packet => packet.length), [19, 137]);
+});
+
+test("实时封面、拼接与通关页面不会自行生成认证完成记录", async () => {
+  const { badge, link } = await fixture();
+  const control = new BadgeControl(badge, link, api);
+  await control.sync();
+  const live = {v: 1 as const, device_id: badge.device_id, session_id: "demo-001" as const,
+    game_id: "qin_formation" as const, unlocked: true, completed: false, collected: false,
+    exhibiting: false, screen: "cover" as const, placed_mask: 0, mistakes: 0};
+  link.view = live;
+  assert.equal((await control.runtime())?.screen, "cover");
+  link.view = {...live, screen: "playing", placed_mask: 3};
+  assert.equal((await control.runtime())?.placed_mask, 3);
+  link.view = {...live, screen: "result", placed_mask: 7, completed: true, collected: true};
+  assert.equal((await control.runtime())?.screen, "result");
+  assert.equal((await api.progress(badge.badge_id)).completed, false);
+  link.flags = 7;
+  assert.equal((await control.sync()).completed, true);
+  control.close();
+  await assert.rejects(control.runtime(), /重连/);
+});
+
+test("旧固件不编造实时页面，不完整或越界的快照被拒绝", async () => {
+  const { badge, link } = await fixture();
+  const control = new BadgeControl(badge, link, api);
+  await control.sync();
+  assert.equal(await control.runtime(), undefined);
+  const base = {v: 1, device_id: badge.device_id, session_id: "demo-001", game_id: "qin_formation",
+    unlocked: false, completed: false, collected: false, exhibiting: false};
+  assert.equal(badgeRuntimeSchema.safeParse(base).success, true);
+  assert.equal(badgeRuntimeSchema.safeParse({...base, screen: "playing"}).success, false);
+  assert.equal(badgeRuntimeSchema.safeParse({...base, screen: "playing", placed_mask: 8, mistakes: 0}).success, false);
+  assert.equal(badgeRuntimeSchema.safeParse({...base, screen: "other", placed_mask: 0, mistakes: 0}).success, false);
+  link.view = {...base, v: 1, session_id: "demo-001", game_id: "qin_formation",
+    device_id: "esp32s3-aabbccddeeff", screen: "playing", placed_mask: 0, mistakes: 0};
+  await assert.rejects(control.runtime(), /其他设备/);
 });
