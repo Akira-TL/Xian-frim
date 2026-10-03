@@ -380,24 +380,29 @@ static void answer(lv_event_t *event)
     render();
 }
 
-static void art_card(qin_art_id_t art, int x, int y, int size)
+static bool art_card(qin_art_id_t art, int x, int y, int size)
 {
     lv_obj_t *card = lv_obj_create(pg.root);
     lv_obj_remove_style_all(card);
     lv_obj_set_pos(card, x, y);
     lv_obj_set_size(card, size, size);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-    qin_art_add(card, art, size, size);
+    return qin_art_add(card, art, size, size);
 }
 
 static void render_bonus_game(void)
 {
     bonus_round_t round = pg.snapshot.rounds[pg.game - 1];
     if (pg.game == GAME_GATE) {
-        art_card(QIN_ART_GATE, 80, 65, 200);
+        bool visible = art_card(QIN_ART_GATE, 80, 65, 200);
         // 图片坐标：门洞居中下方、旗在左上、鼓在右下；不使用与图片无关的假按钮。
         static const int regions[3][4] = {{155, 185, 60, 55}, {80, 65, 70, 90}, {225, 188, 55, 68}};
+        static const char *const captions[] = {"城门", "红旗", "大鼓"};
         for (unsigned i = 0; i < 3; ++i) {
+            if (!visible) {
+                lv_obj_set_height(button(captions[i], 105, 85 + (int)i * 54, 150, answer, i), 46);
+                continue;
+            }
             lv_obj_t *target = button(NULL, regions[i][0], regions[i][1], regions[i][2], answer, i);
             lv_obj_set_height(target, regions[i][3]);
             lv_obj_set_style_bg_opa(target, LV_OPA_TRANSP, LV_PART_MAIN);
@@ -495,16 +500,7 @@ static void render(void)
             lv_obj_set_style_bg_opa(art, LV_OPA_TRANSP, 0);
             lv_obj_set_style_border_width(art, 0, 0);
             lv_obj_clear_flag(art, LV_OBJ_FLAG_SCROLLABLE);
-            if (!qin_art_add(art, pg.game == GAME_QIN ? QIN_ART_REWARD : game_art[pg.game], 200, 160)) {
-                for (unsigned i = 0; i < 3; ++i) {
-                    lv_obj_t *part = lv_obj_create(art);
-                    lv_obj_remove_style_all(part);
-                    lv_obj_set_pos(part, 64, 9 + (int)i * 46);
-                    lv_obj_set_size(part, 72, 46);
-                    lv_obj_clear_flag(part, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-                    fragment(part, i);
-                }
-            }
+            qin_art_add(art, pg.game == GAME_QIN ? QIN_ART_REWARD : game_art[pg.game], 200, 160);
             label(pg.notice ? pg.notice : reward_names[pg.game], 240);
             if (pg.view == VIEW_COLLECTION) {
                 lv_obj_t *display = button("设为展示", 65, 276, 140, exhibit, 0);

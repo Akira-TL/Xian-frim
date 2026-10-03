@@ -243,10 +243,19 @@ int main(void)
     capture(display, "gate-game");
     lv_obj_update_layout(page.root);
     // 先点错旗，阶段不增加，再按门、旗、鼓完成。
+#ifdef BROKEN_GAME_ASSETS
+    assert(find_button(page.root, "城门") && find_button(page.root, "红旗") && find_button(page.root, "大鼓"));
+    drag(input, x + 180, y + 162, x + 180, y + 162);
+#else
     drag(input, x + 110, y + 100, x + 110, y + 100);
+#endif
     assert(rounds[0].stage == 0 && rounds[0].mistakes == 1);
     lv_obj_update_layout(page.root);
+#ifdef BROKEN_GAME_ASSETS
+    drag(input, x + 180, y + 108, x + 180, y + 108);
+#else
     drag(input, x + 180, y + 215, x + 180, y + 215);
+#endif
     assert(rounds[0].stage == 1);
     click(page.root, "设置"); click(page.root, "返回");
     assert(rounds[0].stage == 1);
@@ -274,9 +283,17 @@ int main(void)
     click(page.root, "城门寻宝"); click(page.root, "继续游戏");
     assert(rounds[0].stage == 1);
     lv_obj_update_layout(page.root);
+#ifdef BROKEN_GAME_ASSETS
+    drag(input, x + 180, y + 162, x + 180, y + 162);
+#else
     drag(input, x + 110, y + 100, x + 110, y + 100);
+#endif
     lv_obj_update_layout(page.root);
+#ifdef BROKEN_GAME_ASSETS
+    drag(input, x + 180, y + 216, x + 180, y + 216);
+#else
     drag(input, x + 250, y + 220, x + 250, y + 220);
+#endif
     assert(current_screen == EXPLORATION_RESULT && bonus_collected == 3);
     capture(display, "gate-result");
     // 新游戏完成不能清除秦俑认证进度。

@@ -9,4 +9,6 @@ cmake -S "${project_root}/tests/firmware/render" -B "${test_build_dir}" -G Ninja
     > "${project_root}/logs/qin-render-test-build.log" 2>&1
 cmake --build "${test_build_dir}" -j 6 >> "${project_root}/logs/qin-render-test-build.log" 2>&1
 "${test_build_dir}/qin_render_test"
+"${test_build_dir}/qin_fallback_test"
 "${test_build_dir}/qin_page_test"
+"${test_build_dir}/qin_broken_page_test"

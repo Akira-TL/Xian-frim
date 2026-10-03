@@ -14,5 +14,5 @@ typedef enum {
     QIN_ART_COUNT
 } qin_art_id_t;
 
-// 有图片则按比例放入指定区域；缺图返回 false，由页面显示占位图。
+// 返回真实素材是否可用。碎片失败由页面绘制对应轮廓；其他素材失败自动显示通用章。
 bool qin_art_add(lv_obj_t *parent, qin_art_id_t id, int width, int height);

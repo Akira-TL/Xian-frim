@@ -34,22 +34,37 @@ target_include_directories(qin_render_test PRIVATE
     "${FIRMWARE_BUILD_DIR}/qin-assets")
 target_link_libraries(qin_render_test PRIVATE lvgl m)
 
+add_executable(qin_fallback_test qin_fallback_test.c
+    "${PROJECT_ROOT}/main/display/page/exploration/qin_art.c")
+target_include_directories(qin_fallback_test PRIVATE
+    "${PROJECT_ROOT}/main/display/page/exploration" "${CMAKE_CURRENT_SOURCE_DIR}/broken-assets")
+target_compile_options(qin_fallback_test PRIVATE -UNDEBUG)
+target_link_libraries(qin_fallback_test PRIVATE lvgl m)
+
 # 运行正式游戏页面；仅设备状态和亮度／音量存储接口使用测试替身。
-add_executable(qin_page_test qin_page_test.c
+foreach(PAGE_TARGET qin_page_test qin_broken_page_test)
+add_executable(${PAGE_TARGET} qin_page_test.c
     "${PROJECT_ROOT}/main/display/page/exploration/pg_exploration.c"
     "${PROJECT_ROOT}/main/display/page/exploration/qin_slot.c"
     "${PROJECT_ROOT}/main/display/page/exploration/qin_art.c"
     "${PROJECT_ROOT}/main/services/exploration/qin_game.c"
     "${PROJECT_ROOT}/main/services/exploration/bonus_game.c"
     "${PROJECT_ROOT}/main/display/assert/font/font_puhui_18_4.c")
-foreach(NAME head body legs reward guardian cover gate poem)
-    target_sources(qin_page_test PRIVATE "${FIRMWARE_BUILD_DIR}/qin-assets/qin_${NAME}.c")
-endforeach()
-target_compile_definitions(qin_page_test PRIVATE SIMULATOR LV_LVGL_H_INCLUDE_SIMPLE)
-target_compile_options(qin_page_test PRIVATE -UNDEBUG)
-target_include_directories(qin_page_test PRIVATE
+if(PAGE_TARGET STREQUAL "qin_page_test")
+    foreach(NAME head body legs reward guardian cover gate poem)
+        target_sources(${PAGE_TARGET} PRIVATE "${FIRMWARE_BUILD_DIR}/qin-assets/qin_${NAME}.c")
+    endforeach()
+    target_include_directories(${PAGE_TARGET} PRIVATE "${FIRMWARE_BUILD_DIR}/qin-assets")
+else()
+    target_compile_definitions(${PAGE_TARGET} PRIVATE BROKEN_GAME_ASSETS)
+    target_include_directories(${PAGE_TARGET} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/broken-assets")
+endif()
+target_compile_definitions(${PAGE_TARGET} PRIVATE SIMULATOR LV_LVGL_H_INCLUDE_SIMPLE)
+target_compile_options(${PAGE_TARGET} PRIVATE -UNDEBUG)
+target_include_directories(${PAGE_TARGET} PRIVATE
     "${PROJECT_ROOT}/main" "${PROJECT_ROOT}/main/display"
-    "${PROJECT_ROOT}/main/display/page/exploration" "${FIRMWARE_BUILD_DIR}/qin-assets"
+    "${PROJECT_ROOT}/main/display/page/exploration"
     "${FIRMWARE_BUILD_DIR}/config"
     "/home/Akira/github/esp-idf/components/esp_common/include")
-target_link_libraries(qin_page_test PRIVATE lvgl m)
+target_link_libraries(${PAGE_TARGET} PRIVATE lvgl m)
+endforeach()
