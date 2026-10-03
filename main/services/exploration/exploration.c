@@ -149,7 +149,7 @@ esp_err_t exploration_init(void)
     size_t length = sizeof(saved);
     error = nvs_get_blob(storage, "progress", &saved, &length);
     if (error == ESP_ERR_NVS_NOT_FOUND) {
-        saved = (saved_progress_t){.schema = 1, .session = "demo-001"};
+        saved = (saved_progress_t){.schema = 1, .flags = 1, .session = "demo-001"};
         error = persist(&saved);
     } else if (error == ESP_OK) {
         progress = decode_flags(saved.flags);
@@ -163,6 +163,15 @@ esp_err_t exploration_init(void)
         return error;
     }
     progress = decode_flags(saved.flags);
+    // 比赛版上电即可玩；旧锁定存档原地开放，不清空完成、收藏或展示。
+    if (!progress.unlocked) {
+        saved_progress_t next = saved;
+        next.flags |= 1;
+        error = persist(&next);
+        if (error != ESP_OK) { nvs_close(storage); return error; }
+        saved = next;
+        progress = decode_flags(saved.flags);
+    }
     length = sizeof(bonus);
     error = nvs_get_blob(storage, "bonus", &bonus, &length);
     if (error == ESP_ERR_NVS_NOT_FOUND) {
@@ -223,10 +232,9 @@ esp_err_t exploration_begin(void)
 {
     if (!ready) return ESP_ERR_INVALID_STATE;
     xSemaphoreTake(mutex, portMAX_DELAY);
-    esp_err_t error = progress.unlocked ? ESP_OK : ESP_ERR_INVALID_STATE;
-    if (error == ESP_OK) qin_puzzle_begin(&puzzle);
+    qin_puzzle_begin(&puzzle);
     xSemaphoreGive(mutex);
-    return error;
+    return ESP_OK;
 }
 
 esp_err_t exploration_select(uint8_t piece, qin_result_t *result)

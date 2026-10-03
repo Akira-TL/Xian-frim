@@ -19,7 +19,7 @@ void qin_puzzle_begin(qin_puzzle_t *puzzle)
 
 qin_result_t qin_select(const qin_progress_t *progress, qin_puzzle_t *puzzle, uint8_t piece)
 {
-    if (!progress->unlocked) return QIN_LOCKED;
+    (void)progress; // 比赛版选片不检查解锁权限。
     if (piece >= 3 || (puzzle->placed_mask & (1u << piece))) return QIN_INVALID;
     puzzle->selected_piece = (int8_t)piece;
     return QIN_PLACED;
@@ -27,7 +27,7 @@ qin_result_t qin_select(const qin_progress_t *progress, qin_puzzle_t *puzzle, ui
 
 qin_result_t qin_place(qin_progress_t *progress, qin_puzzle_t *puzzle, uint8_t slot)
 {
-    if (!progress->unlocked) return QIN_LOCKED;
+    progress->unlocked = true; // 兼容旧协议字段；不再作为游玩权限。
     if (slot >= 3 || puzzle->selected_piece < 0 ||
         (puzzle->placed_mask & (1u << slot))) return QIN_INVALID;
     if (slot != (uint8_t)puzzle->selected_piece) {

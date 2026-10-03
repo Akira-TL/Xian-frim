@@ -17,8 +17,10 @@ int main(void)
     qin_puzzle_t puzzle;
     qin_puzzle_begin(&puzzle);
     assert(qin_progress_valid(&progress));
-    assert(qin_select(&progress, &puzzle, 0) == QIN_LOCKED);
-    assert(qin_place(&progress, &puzzle, 0) == QIN_LOCKED);
+    assert(qin_select(&progress, &puzzle, 0) == QIN_PLACED);
+    assert(qin_place(&progress, &puzzle, 0) == QIN_PLACED);
+    assert(progress.unlocked && !progress.collected);
+    qin_puzzle_begin(&puzzle);
     assert(!qin_exhibit(&progress));
     qin_unlock(&progress);
     assert(qin_select(&progress, &puzzle, 3) == QIN_INVALID);
@@ -40,6 +42,6 @@ int main(void)
     assert(qin_place(&progress, &puzzle, 1) == QIN_INVALID);
     qin_progress_t corrupt = {.completed = true, .collected = true};
     assert(!qin_progress_valid(&corrupt));
-    puts("秦俑游戏：锁定、错误恢复、三片通关、收藏、复玩测试通过");
+    puts("秦俑游戏：无需解锁直接游玩、错误恢复、三片通关、收藏、复玩测试通过");
     return 0;
 }

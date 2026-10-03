@@ -182,7 +182,7 @@ static void navigate(lv_event_t *event)
         qin_puzzle_t current;
         if (exploration_get(NULL, &current, NULL) != ESP_OK ||
             ((!pg.game_started || current.placed_mask == 7) && exploration_begin() != ESP_OK)) {
-            pg.notice = "请先到点扫码解锁";
+            pg.notice = "暂不能开始，请重试";
             target = VIEW_INTRO;
         } else {
             pg.game_started = true;
@@ -552,7 +552,7 @@ static void render(void)
         static const char *const indicators[] = {"1 / 3 · 左右滑动", "2 / 3 · 左右滑动", "3 / 3 · 左右滑动"};
         static const char *const descriptions[] = {"拖动三片，拼回秦俑", "按提示找门、旗、鼓", "补全两句唐诗"};
         lv_obj_t *status = label(pg.notice ? pg.notice : pg.view == VIEW_GAMES ? indicators[pg.game] :
-            pg.game != GAME_QIN || pg.progress.unlocked ? descriptions[pg.game] : "扫码解锁游戏", 210);
+            descriptions[pg.game], 210);
         lv_obj_set_style_transform_scale_x(status, 256, 0);
         lv_obj_set_style_transform_scale_y(status, 256, 0);
         lv_obj_set_style_text_color(status, lv_color_hex(0x6e654d), 0);
@@ -567,7 +567,6 @@ static void render(void)
         lv_obj_t *caption = lv_obj_get_child(play, 0);
         lv_obj_set_style_transform_scale_x(caption, 352, 0);
         lv_obj_set_style_transform_scale_y(caption, 352, 0);
-        if (pg.view == VIEW_INTRO && pg.game == GAME_QIN && !pg.progress.unlocked) lv_obj_add_state(play, LV_STATE_DISABLED);
         lv_obj_set_height(button(pg.view == VIEW_GAMES ? "封面" : "返回", 82, 286, 94,
             navigate, pg.view == VIEW_GAMES ? VIEW_HOME : VIEW_GAMES), 44);
         if (pg.view == VIEW_INTRO && resume && (pg.game != GAME_QIN || pg.puzzle.placed_mask))
@@ -598,7 +597,7 @@ static void poll(lv_timer_t *timer)
     qin_progress_t value;
     if (exploration_get(&value, NULL, NULL) == ESP_OK &&
         (value.unlocked != pg.progress.unlocked || value.completed != pg.progress.completed)) {
-        pg.notice = value.unlocked ? "游戏已解锁，点击开始" : NULL;
+        pg.notice = NULL;
         render();
     }
 }
