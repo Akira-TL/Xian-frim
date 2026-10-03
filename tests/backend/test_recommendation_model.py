@@ -178,6 +178,27 @@ class UnverifiedCompletionModel:
                 '"operator_reason":"快照显示已完成A站，因此建议去B站。"}')
 
 
+class DeniedCompletionModel:
+    async def recommend(self, snapshot: RecommendationInput) -> str:
+        return ('{"snapshot_id":"' + snapshot.snapshot_id
+                + '","selected_site":"B","child_text":"下一站去城门观察图案。",'
+                '"operator_reason":"没有认证完成记录，不声称已完成或可玩。"}')
+
+
+def test_explicit_denial_of_completion_is_not_a_false_positive(tmp_path: Path) -> None:
+    with TestClient(create_app(tmp_path / "denied-completion.sqlite3", "operator-test", "terminal-test", lambda: NOW,
+                              recommendation_model=DeniedCompletionModel())) as client:
+        register(client)
+        post_scan(client, scan())
+        refresh_site(client, "B")
+        response = client.post("/api/v1/recommendations",
+                               content='{"badge_id":"badge-001","event_id":"scan-001"}', headers=operator())
+        assert response.status_code == 200
+        result = RecommendationResult.model_validate_json(response.text)
+        assert result.source == "model"
+        assert result.operator_reason == "没有认证完成记录，不声称已完成或可玩。"
+
+
 def test_model_cannot_turn_a_visit_without_verified_progress_into_completion(tmp_path: Path) -> None:
     with TestClient(create_app(tmp_path / "false-completion.sqlite3", "operator-test", "terminal-test", lambda: NOW,
                               recommendation_model=UnverifiedCompletionModel())) as client:

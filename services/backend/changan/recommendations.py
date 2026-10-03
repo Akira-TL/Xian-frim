@@ -1,6 +1,7 @@
 """基于已记录到访的推荐约束；规则建议不冒充模型输出。"""
 
 import asyncio
+import re
 from hashlib import sha256
 from datetime import datetime, timedelta
 from time import monotonic
@@ -204,9 +205,11 @@ class RecommendationService:
         if (output.snapshot_id != result.snapshot_id or not any(
                 candidate.site.site_id == output.selected_site for candidate in result.input.candidates)):
             raise ValueError("模型快照或候选不匹配")
+        negative_prefixes = ("不声称", "未声称", "不会声称", "不表示", "未表示", "没有", "暂无", "无", "不能说")
         if not result.input.completed_games and any(
-                claim in text for text in (output.child_text, output.operator_reason)
-                for claim in ("已完成", "已通关", "已收藏", "已解锁", "已获得奖励")):
+                not text[:match.start()].endswith(negative_prefixes)
+                for text in (output.child_text, output.operator_reason)
+                for match in re.finditer(r"已完成|已通关|已收藏|已解锁|已获得奖励", text)):
             raise ValueError("没有认证完成记录，不能声明已完成或已取得奖励状态")
         return RecommendationResult(snapshot_id=result.snapshot_id, source="model", fallback_reason=None,
                                     selected_site=output.selected_site, child_text=output.child_text,
