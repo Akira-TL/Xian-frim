@@ -21,6 +21,27 @@ static atomic_bool ready;
 static saved_progress_t saved;
 static qin_progress_t progress;
 static qin_puzzle_t puzzle;
+static exploration_screen_t screen = EXPLORATION_COVER;
+
+esp_err_t exploration_set_screen(exploration_screen_t value)
+{
+    if (value < 0 || value >= EXPLORATION_SCREEN_COUNT) return ESP_ERR_INVALID_ARG;
+    if (!ready) return ESP_ERR_INVALID_STATE;
+    xSemaphoreTake(mutex, portMAX_DELAY);
+    screen = value;
+    xSemaphoreGive(mutex);
+    return ESP_OK;
+}
+
+esp_err_t exploration_snapshot(exploration_snapshot_t *snapshot)
+{
+    if (!snapshot) return ESP_ERR_INVALID_ARG;
+    if (!ready) return ESP_ERR_INVALID_STATE;
+    xSemaphoreTake(mutex, portMAX_DELAY);
+    *snapshot = (exploration_snapshot_t){.progress = progress, .puzzle = puzzle, .screen = screen};
+    xSemaphoreGive(mutex);
+    return ESP_OK;
+}
 
 static uint8_t encode_flags(const qin_progress_t *value)
 {

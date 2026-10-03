@@ -140,17 +140,21 @@ static int read_value(uint16_t connection, uint16_t handle,
     if (argument == NULL) {
         return os_mbuf_append(context->om, device, strlen(device)) == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
     }
-    qin_progress_t progress;
-    char session[EXPLORATION_SESSION_SIZE];
-    if (exploration_get(&progress, NULL, session) != ESP_OK) return BLE_ATT_ERR_UNLIKELY;
-    // 当前只支持固定会话，损坏的持久化内容不应被编码成有效协议。
-    if (strcmp(session, "demo-001") != 0) return BLE_ATT_ERR_UNLIKELY;
-    char state[256];
+    exploration_snapshot_t snapshot;
+    if (exploration_snapshot(&snapshot) != ESP_OK) return BLE_ATT_ERR_UNLIKELY;
+    qin_progress_t progress = snapshot.progress;
+    static const char *const screens[] = {"cover", "selection", "intro", "playing", "result",
+                                         "collection", "exhibit", "settings"};
+    if (snapshot.screen >= EXPLORATION_SCREEN_COUNT) return BLE_ATT_ERR_UNLIKELY;
+    // 实时遥测不替代签名进度，不改变既有版本1认证回执。
+    char state[512];
     int length = snprintf(state, sizeof(state),
         "{\"v\":1,\"device_id\":\"%s\",\"session_id\":\"demo-001\","
-        "\"game_id\":\"qin_formation\",\"unlocked\":%s,\"completed\":%s,\"collected\":%s,\"exhibiting\":%s}",
+        "\"game_id\":\"qin_formation\",\"unlocked\":%s,\"completed\":%s,\"collected\":%s,\"exhibiting\":%s,"
+        "\"screen\":\"%s\",\"placed_mask\":%u,\"mistakes\":%u}",
         device, progress.unlocked ? "true" : "false", progress.completed ? "true" : "false",
-        progress.collected ? "true" : "false", progress.exhibiting ? "true" : "false");
+        progress.collected ? "true" : "false", progress.exhibiting ? "true" : "false",
+        screens[snapshot.screen], snapshot.puzzle.placed_mask, snapshot.puzzle.mistakes);
     if (length < 0 || length >= sizeof(state)) return BLE_ATT_ERR_INSUFFICIENT_RES;
     return os_mbuf_append(context->om, state, length) == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
 }
