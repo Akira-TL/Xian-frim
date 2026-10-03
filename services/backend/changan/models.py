@@ -195,7 +195,19 @@ class VisitSummary(Contract):
     excluded_future_events: Annotated[int, Field(ge=0)]
 
 
+class TrendEstimate(Contract):
+    site_id: SiteId
+    current_window_visits: Annotated[int, Field(ge=0)]
+    previous_window_visits: Annotated[int, Field(ge=0)]
+    current_weight: Literal[0.7] = 0.7
+    previous_weight: Literal[0.3] = 0.3
+    window_seconds: Literal[300] = 300
+    estimated_next_visits: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None
+    status: Literal["ready", "missing", "stale", "untrusted", "insufficient_samples"]
+
+
 class ActivitySnapshot(Contract):
     map: MapSnapshot
     visits: VisitSummary
+    trend_estimates: list[TrendEstimate]
     progress: DeviceProgressSummary | None

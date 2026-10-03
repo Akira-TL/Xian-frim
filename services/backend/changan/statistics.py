@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 from .models import (
     HeartbeatReceipt, HeatThresholds, MapSnapshot, SiteId, SiteStatistics, Source,
-    TransitionCount, TrendPoint, Visit, VisitSummary, SiteVisitTotal,
+    TransitionCount, TrendPoint, Visit, VisitSummary, SiteVisitTotal, TrendEstimate,
 )
 
 SITES: tuple[SiteId, ...] = ("A", "B", "C")
@@ -24,6 +24,27 @@ def summarize_visits(visits: list[Visit], now: datetime, source: Source) -> Visi
         excluded_untrusted_events=sum(visit.time_quality == "untrusted" for visit in records),
         excluded_future_events=sum(visit.time_quality == "synced" and visit.captured_at > now for visit in records),
     )
+
+
+def estimate_trend(visits: list[Visit], snapshot: MapSnapshot) -> list[TrendEstimate]:
+    """两窗有效到访次数的加权估计；与去重腰牌观测及情景推演分开。"""
+    now = snapshot.generated_at
+    boundary = now - timedelta(minutes=5)
+    start = now - timedelta(minutes=10)
+    trusted = [visit for visit in visits if visit.session_id == snapshot.session_id
+               and visit.source == snapshot.source and visit.time_quality == "synced"
+               and start < visit.captured_at <= now]
+    estimates: list[TrendEstimate] = []
+    for site in snapshot.sites:
+        recent = sum(visit.site_id == site.site_id and boundary < visit.captured_at for visit in trusted)
+        previous = sum(visit.site_id == site.site_id and visit.captured_at <= boundary for visit in trusted)
+        # 两个窗口各至少一条，避免将刚启动或完全缺观测的窗口当作可靠零值。
+        status = site.data_status if site.data_status != "fresh" else (
+            "ready" if recent > 0 and previous > 0 else "insufficient_samples")
+        estimates.append(TrendEstimate(site_id=site.site_id,
+            current_window_visits=recent, previous_window_visits=previous, status=status,
+            estimated_next_visits=(7 * recent + 3 * previous) / 10 if status == "ready" else None))
+    return estimates
 
 
 def count_badges(visits: list[Visit], start: datetime, end: datetime) -> int:

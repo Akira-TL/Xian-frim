@@ -72,7 +72,18 @@ const visitSummarySchema = z.strictObject({
   && value.participating_badges <= value.total_visits
   && value.interval_samples === value.total_visits - value.participating_badges
   && (value.interval_samples === 0) === (value.average_scan_interval_seconds === null), "到访汇总计数或间隔样本不一致");
-export const activitySchema = z.strictObject({ map: mapSchema, visits: visitSummarySchema, progress: progressSummarySchema.nullable() })
+const trendEstimateSchema = z.strictObject({
+  site_id: siteId, current_window_visits: count, previous_window_visits: count,
+  current_weight: z.literal(0.7), previous_weight: z.literal(0.3), window_seconds: z.literal(300),
+  estimated_next_visits: z.number().nonnegative().nullable(),
+  status: z.enum(["ready", "missing", "stale", "untrusted", "insufficient_samples"]),
+}).refine(value => value.status === "ready"
+  ? value.current_window_visits > 0 && value.previous_window_visits > 0
+    && value.estimated_next_visits === (7 * value.current_window_visits + 3 * value.previous_window_visits) / 10
+  : value.estimated_next_visits === null, "趋势估计状态或计算不一致");
+export const activitySchema = z.strictObject({ map: mapSchema, visits: visitSummarySchema,
+  trend_estimates: z.array(trendEstimateSchema).length(3).refine(values => new Set(values.map(value => value.site_id)).size === 3,
+    "趋势估计节点不完整"), progress: progressSummarySchema.nullable() })
   .refine(value => (value.map.source === "generated_simulation") === (value.progress === null),
     "模拟来源不能包含实物游戏进度");
 export type ActivitySnapshot = z.infer<typeof activitySchema>;

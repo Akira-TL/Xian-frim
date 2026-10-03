@@ -7,7 +7,7 @@ from changan.models import ActivitySnapshot, MapSnapshot, SiteSelection, Termina
 from changan.api import create_app
 from changan.catalog import SiteCatalog, default_catalog
 from changan.recommendations import RecommendationRecord, RecommendationResult
-from changan.statistics import summarize_visits
+from changan.statistics import summarize_visits, build_map, estimate_trend
 from changan.models import Source, Visit
 from test_recommendations import refresh_site
 from test_visits import client, operator, post_scan, register, scan, terminal, NOW
@@ -90,6 +90,43 @@ def heartbeat(client: TestClient, seconds: int = 0) -> None:
                                 captured_at=NOW + timedelta(seconds=seconds))
     response = client.post("/api/v1/terminal/heartbeat", content=request.model_dump_json(), headers=terminal())
     assert response.status_code == 200
+
+
+def test_trend_estimate_uses_valid_visit_counts_not_unique_badges(client: TestClient) -> None:
+    register(client)
+    for event, seconds in (("prev-one", -500), ("prev-two", -400), ("boundary", -300),
+                           ("now-one", -150), ("now-two", -10)):
+        post_scan(client, scan(event, seconds))
+    response = client.get("/api/v1/activity", headers=operator())
+    assert response.status_code == 200
+    activity = ActivitySnapshot.model_validate_json(response.text)
+    estimate = activity.trend_estimates[0]
+    assert estimate.status == "ready"
+    assert (estimate.current_window_visits, estimate.previous_window_visits) == (2, 3)
+    assert estimate.estimated_next_visits == 2.3
+    assert activity.map.sites[0].recent_unique_badges == 1  # 次数与去重腰牌数明确分开。
+    assert activity.trend_estimates[1].status == "missing"
+    assert activity.trend_estimates[1].estimated_next_visits is None
+
+
+def test_trend_estimate_rejects_missing_stale_uncertain_and_one_window_samples() -> None:
+    def record(event: str, seconds: int, **changes: str) -> Visit:
+        return Visit.model_validate({"event_id": event, "session_id": "demo-001", "badge_id": "one",
+            "terminal_id": "k230-001", "site_id": "A", "config_version": 1,
+            "captured_at": NOW + timedelta(seconds=seconds), "received_at": NOW,
+            "source": Source.PHYSICAL, "time_quality": "synced", **changes})
+    cases = [([], "missing"), ([record("one", -10)], "insufficient_samples"),
+             ([record("old", -400), record("stale", -120)], "stale"),
+             ([record("old", -400), record("fresh", -10), record("bad", -30, time_quality="untrusted")], "untrusted")]
+    for records, status in cases:
+        estimate = estimate_trend(records, build_map(records, [], NOW, Source.PHYSICAL))[0]
+        assert estimate.status == status and estimate.estimated_next_visits is None
+    records = [record("old", -400), record("fresh", -10), record("future", 10),
+               record("wrong-source", -100, source="generated_simulation"),
+               record("wrong-session", -100, session_id="other"), record("outside", -600)]
+    estimate = estimate_trend(records, build_map(records, [], NOW, Source.PHYSICAL))[0]
+    assert estimate.current_window_visits == estimate.previous_window_visits == 1
+    assert estimate.estimated_next_visits == 1.0
 
 
 def test_stale_or_untrusted_data_never_looks_like_low_heat(client: TestClient) -> None:

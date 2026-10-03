@@ -12,6 +12,8 @@ import VisitTrend from "./visit-trend";
 const siteNames = { A: "秦俑工坊", B: "长安城门", C: "诗意庭院" };
 const statusNames = { fresh: "数据新鲜", stale: "数据已过时", missing: "尚无数据", untrusted: "时间不可靠" };
 const heatNames = { low: "低", medium: "中", high: "高", insufficient: "数据不足" };
+const estimateStatusNames = { ready: "可估计", missing: "尚无数据", stale: "数据已过时",
+  untrusted: "时间不可靠", insufficient_samples: "两窗样本不足" };
 const heatStyles = {
   low: "border-emerald-300 bg-emerald-50", medium: "border-amber-300 bg-amber-50",
   high: "border-red-300 bg-red-50", insufficient: "border-stone-300 bg-stone-100",
@@ -149,6 +151,17 @@ export default function Dashboard() {
         <section className={panel}><h2 className="text-xl font-semibold">固定窗口到访趋势</h2>
           <p className="mt-1 text-sm text-stone-600">单位：枚不同腰牌 / 五分钟。仅纳入时间可靠的事件；零表示该窗口无合格记录，不表示现场无人。</p>
           <VisitTrend map={map} offline={offline} />
+          <div className="mt-4 rounded-xl border border-dashed border-amber-400 bg-amber-50 p-3" aria-label="下一五分钟到访趋势估计">
+            <h3 className="font-semibold">下一五分钟到访趋势估计</h3>
+            <p className="mt-1 text-sm">当前窗到访次数 × 0.7 ＋ 前一窗到访次数 × 0.3；两窗各至少一条时间可靠记录且节点数据新鲜才估计。单位：次有效到访／五分钟，不是去重腰牌数或现场人数。</p>
+            <ul className="mt-3 space-y-2">{current?.trend_estimates.map(estimate => <li key={estimate.site_id} data-estimate-site={estimate.site_id}>
+              {estimate.site_id} · {siteNames[estimate.site_id]}：{offline ? "暂不估计（后台未连接）"
+                : estimate.estimated_next_visits === null ? `暂不估计（${estimateStatusNames[estimate.status]}）`
+                  : `${estimate.estimated_next_visits.toFixed(1)} 次`}
+              <span className="ml-2 text-xs text-stone-600">当前窗 {estimate.current_window_visits} 次／前一窗 {estimate.previous_window_visits} 次</span>
+            </li>)}</ul>
+            <p className="mt-2 text-xs text-stone-600">窗口以当前快照时间为界；估计目标为快照之后五分钟。这是明示权重的统计估计，不是训练模型，不显示准确率，不参与解锁、推荐候选热度或现场安全决策。</p>
+          </div>
           <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm">
             <thead><tr><th className="py-2">时间窗（左开右闭）</th>{map.sites.map(site => <th key={site.site_id}>{site.site_id} · {siteNames[site.site_id]}</th>)}</tr></thead>
             <tbody>{windows.map(window => <tr className="border-t" key={window.window_start}>

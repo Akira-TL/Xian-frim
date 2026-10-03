@@ -17,7 +17,7 @@ from .models import (
     HeartbeatReceipt, MapSnapshot, TerminalHeartbeat, ActivitySnapshot,
 )
 from .storage import BusinessError, Repository
-from .statistics import build_map, summarize_visits
+from .statistics import build_map, summarize_visits, estimate_trend
 from .device_protocol import DeviceEnvelope, DeviceKey, DeviceKeys, DeviceReport, DeviceState, NonceRequest
 from .device_service import DeviceService
 from .simulation import ScenarioRequest, ScenarioResult, simulate
@@ -141,7 +141,8 @@ def create_app(db_path: Path, operator_token: str, terminal_token: str,
     def activity_snapshot(source: Source = Source.PHYSICAL) -> ActivitySnapshot:
         visits, heartbeats, progress = repository.activity_observations(source)
         now = clock()
-        return ActivitySnapshot(map=build_map(visits, heartbeats, now, source, catalog.heat_thresholds),
+        snapshot = build_map(visits, heartbeats, now, source, catalog.heat_thresholds)
+        return ActivitySnapshot(map=snapshot, trend_estimates=estimate_trend(visits, snapshot),
                                 visits=summarize_visits(visits, now, source),
                                 progress=progress if source != Source.GENERATED else None)
 
