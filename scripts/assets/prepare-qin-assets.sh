@@ -22,7 +22,7 @@ fi
 for name in "${names[@]}"; do
     if [[ -f "${asset_dir}/${name}.png" ]]; then
         (cd "${project_root}" && uv run --locked --group assets "${converter}" \
-            --ofmt C --cf ARGB8888 --compress NONE \
+            --ofmt C --cf ARGB8888 --compress RLE \
             --name "qin_${name}" -o "${output_dir}" "${asset_dir}/${name}.png")
     else
         # 覆盖仅由本脚本生成的对应文件，防止删掉 PNG 后继续嵌入旧图片。
