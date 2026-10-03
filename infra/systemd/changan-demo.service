@@ -1,0 +1,22 @@
+[Unit]
+Description=Changan browser demo
+After=network.target
+
+[Service]
+Type=simple
+User=Akira
+WorkingDirectory=/home/Akira/Projects/Xian-frim
+Environment=PATH=/home/Akira/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=CHANGAN_PORT=8040
+Environment=PORT=8041
+Environment=CHANGAN_PUBLIC_ORIGIN=https://babelbeast.com
+ExecStart=/usr/bin/bash /home/Akira/Projects/Xian-frim/scripts/demo.sh start
+Restart=on-failure
+RestartSec=3
+KillMode=control-group
+UMask=0077
+StandardOutput=append:/home/Akira/Projects/Xian-frim/logs/domain-demo.log
+StandardError=append:/home/Akira/Projects/Xian-frim/logs/domain-demo.log
+
+[Install]
+WantedBy=multi-user.target
