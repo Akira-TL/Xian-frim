@@ -6,6 +6,15 @@ import type { Badge, DeviceState, Visit } from "../lib/contracts";
 import { BadgeControl } from "../lib/badge-control";
 import { bluetoothSupport, connectBadge } from "../lib/web-bluetooth";
 import VisitorRecommendation from "./visitor-recommendation";
+import ExploreRounded from "@mui/icons-material/ExploreRounded";
+import CollectionsBookmarkRounded from "@mui/icons-material/CollectionsBookmarkRounded";
+import RouteRounded from "@mui/icons-material/RouteRounded";
+import LockOpenRounded from "@mui/icons-material/LockOpenRounded";
+import SportsEsportsRounded from "@mui/icons-material/SportsEsportsRounded";
+import ImageRounded from "@mui/icons-material/ImageRounded";
+import CheckCircleRounded from "@mui/icons-material/CheckCircleRounded";
+import BluetoothRounded from "@mui/icons-material/BluetoothRounded";
+import SyncRounded from "@mui/icons-material/SyncRounded";
 
 const siteNames = { A: "秦俑工坊", B: "长安城门", C: "诗意庭院" };
 type Tab = "explore" | "collection" | "route";
@@ -71,8 +80,8 @@ export default function OperatorPanel() {
     try { await action(); } catch (error) { setNotice(error instanceof Error ? error.message : "操作未完成，请重试"); }
     finally { locked.current = false; setBusy(false); }
   }
-  const steps = [{ name: "解锁", done: progress?.unlocked }, { name: "通关", done: progress?.completed },
-    { name: "收藏", done: progress?.collected }, { name: "展示", done: progress?.exhibiting }];
+  const steps = [{ name: "解锁", done: progress?.unlocked, Icon: LockOpenRounded }, { name: "通关", done: progress?.completed, Icon: SportsEsportsRounded },
+    { name: "收藏", done: progress?.collected, Icon: CollectionsBookmarkRounded }, { name: "展示", done: progress?.exhibiting, Icon: ImageRounded }];
   return <main className="visitor-app">
     <header className="visitor-header"><h1>长安游迹</h1>
       <Image src="/xks/images/changan-gate-v3.webp" width={780} height={260} alt="云山间的长安城门" priority className="visitor-landscape" />
@@ -84,9 +93,9 @@ export default function OperatorPanel() {
         <option value="">选择编号</option>
         {badges.filter(item => /^esp32s3-[0-9a-f]{12}$/.test(item.device_id)).map(item => <option key={item.badge_id} value={item.badge_id}>{item.display_number} 号</option>)}
       </select><button className="visitor-primary" disabled={busy || !badge || !online || !!unsupported}
-        onClick={() => void operate(connected ? () => sync() : connect)}>{busy ? "处理中…" : connected ? "同步进度" : "连接腰牌"}</button></div>
+        onClick={() => void operate(connected ? () => sync() : connect)}>{connected ? <SyncRounded fontSize="small" /> : <BluetoothRounded fontSize="small" />}{busy ? "处理中…" : connected ? "同步进度" : "连接腰牌"}</button></div>
       <ol className="visitor-steps">{steps.map(step => <li key={step.name}>
-        <input type="checkbox" checked={step.done === true} disabled aria-label={`${step.name}${step.done ? "已完成" : "未确认"}`} /><span>{step.name}</span>
+        <span className={`visitor-step-icon ${step.done ? "is-complete" : ""}`} role="img" aria-label={`${step.name}${step.done ? "已完成" : "未确认"}`}><step.Icon />{step.done && <CheckCircleRounded className="visitor-step-check" />}</span><span>{step.name}</span>
       </li>)}</ol>
       {connected && !progress?.unlocked && latestVisit?.site_id === "A" && <button className="visitor-primary visitor-unlock" disabled={busy || !online}
         onClick={() => void operate(() => sync(true))}>解锁秦俑归阵{latestVisit.source === "interface_test" ? "（演示）" : ""}</button>}
@@ -107,7 +116,7 @@ export default function OperatorPanel() {
       <Image src="/xks/images/changan-gate-v3.webp" width={780} height={260} alt="长安文化探索" />
       <ol>{(["A", "B", "C"] as const).map(site => <li key={site}><span>{siteNames[site]}</span><small>{visits.some(item => item.badge_id === badgeId && item.site_id === site && item.source === "physical_scan_simulated_site") ? "已打卡" : "待探索"}</small></li>)}</ol><p>路线示意</p>
     </section>}
-    <nav className="visitor-nav" aria-label="页面导航">{([["explore", "探索"], ["collection", "收藏"], ["route", "路线"]] as const)
-      .map(([value, name]) => <button key={value} aria-current={tab === value ? "page" : undefined} onClick={() => setTab(value)}>{name}</button>)}</nav>
+    <nav className="visitor-nav" aria-label="页面导航">{([{value: "explore", name: "探索", Icon: ExploreRounded}, {value: "collection", name: "收藏", Icon: CollectionsBookmarkRounded}, {value: "route", name: "路线", Icon: RouteRounded}] as const)
+      .map(({value, name, Icon}) => <button key={value} aria-current={tab === value ? "page" : undefined} onClick={() => setTab(value)}><Icon fontSize="small" />{name}</button>)}</nav>
   </main>;
 }
