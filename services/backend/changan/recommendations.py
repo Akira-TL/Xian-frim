@@ -29,6 +29,19 @@ class RecommendationRequest(Contract):
     event_id: CommandId
 
 
+class VisitorProfile(Contract):
+    party: Literal["family", "friends", "older", "solo"] = "family"
+    interest: Literal["history", "photography", "poetry"] = "history"
+    pace: Literal["relaxed", "normal"] = "normal"
+
+
+class GuideRequest(Contract):
+    start_site: SiteId = "A"
+    visitor_profile: VisitorProfile = Field(default_factory=VisitorProfile)
+    data_source: Literal["physical_scan_simulated_site", "generated_simulation"] = "generated_simulation"
+    crowd_scenario: Literal["balanced", "gate_busy", "courtyard_busy"] = "balanced"
+
+
 class RecommendationCandidate(Contract):
     site: SiteDefinition
     statistics: SiteStatistics
@@ -48,6 +61,7 @@ class RecommendationInput(Contract):
     completed_games: list[Literal["qin_formation"]]
     progress_verified_at: datetime | None
     candidates: list[RecommendationCandidate]
+    visitor_profile: VisitorProfile | None = None
 
 
 class RecommendationResult(Contract):
@@ -121,6 +135,39 @@ class RecommendationService:
 
     async def create(self, request: RecommendationRequest, clock: Callable[[], datetime]) -> RecommendationResult:
         result = self._generate(request, clock())
+        return await self._finish(request, result, clock)
+
+    async def create_guide(self, request: GuideRequest, clock: Callable[[], datetime]) -> RecommendationResult:
+        now = clock()
+        visits, heartbeats = self.repository.observations()
+        source = Source(request.data_source)
+        statistics = build_map(visits, heartbeats, now, source, self.catalog.heat_thresholds)
+        if source == Source.GENERATED:
+            # 明示的比赛演示输入，不写到访、不冒充实时在场人数。
+            counts = {"balanced": (4, 3, 3), "gate_busy": (4, 9, 2), "courtyard_busy": (4, 2, 9)}[request.crowd_scenario]
+            statistics.sites = [SiteStatistics(site_id=site.site_id, recent_unique_badges=count,
+                previous_unique_badges=count, change=0, excluded_untrusted_events=0,
+                updated_at=now, data_status="fresh", heat="low" if count < self.catalog.heat_thresholds.medium_min
+                else "medium" if count < self.catalog.heat_thresholds.high_min else "high")
+                for site in self.catalog.sites
+                for count in [counts[0 if site.site_id == "A" else 1 if site.site_id == "B" else 2]]]
+        start = next(site for site in self.catalog.sites if site.site_id == request.start_site)
+        candidates = [RecommendationCandidate(site=site, statistics=observed, visited=False)
+            for site in self.catalog.sites for observed in statistics.sites
+            if observed.site_id == site.site_id and site.site_id in start.reachable_sites
+            and site.is_open and observed.data_status == "fresh" and observed.updated_at is not None]
+        snapshot = RecommendationInput(snapshot_id=uuid4().hex, data_source=source, generated_at=now,
+            expires_at=min([now + timedelta(seconds=30)] + [item.statistics.updated_at + timedelta(seconds=90)
+                for item in candidates if item.statistics.updated_at is not None]),
+            catalog_version=self.catalog.version, heat_thresholds=self.catalog.heat_thresholds,
+            selected_visit_site=request.start_site, visited_sites=[], completed_games=[], progress_verified_at=None,
+            candidates=candidates, visitor_profile=request.visitor_profile)
+        # 指引请求只留推荐审计记录，不构造扫码或把自选起点当作到访。
+        context = RecommendationRequest(badge_id="visitor-demo", event_id="guide-" + snapshot.snapshot_id)
+        return await self._finish(context, self._rule(snapshot, "not_configured"), clock, guide=True)
+
+    async def _finish(self, request: RecommendationRequest, result: RecommendationResult,
+                      clock: Callable[[], datetime], *, guide: bool = False) -> RecommendationResult:
         attempted = self.model is not None and bool(result.input.candidates)
         raw: str | None = None
         if attempted:
@@ -165,8 +212,11 @@ class RecommendationService:
                 validation=audit.validation, input=result.input)
             self.repository.save_recommendation_rejection(result.snapshot_id, rejection.model_dump_json())
             raise BusinessError(409, "推荐输入快照已过期，请重新生成，不使用晚到结果")
-        self.repository.save_recommendation(result.snapshot_id, request.badge_id, request.event_id,
-                                             result.model_dump_json(), audit.model_dump_json())
+        if guide:
+            self.repository.save_guide_recommendation(result.snapshot_id, result.model_dump_json(), audit.model_dump_json())
+        else:
+            self.repository.save_recommendation(result.snapshot_id, request.badge_id, request.event_id,
+                                                 result.model_dump_json(), audit.model_dump_json())
         return result
 
     def audit(self, snapshot_id: str) -> RecommendationAudit:
@@ -268,11 +318,25 @@ class RecommendationService:
     @staticmethod
     def _rule(snapshot: RecommendationInput, reason: RuleFailure) -> RecommendationResult:
         if snapshot.candidates:
-            selected = min(snapshot.candidates, key=lambda candidate: (candidate.visited,
-                            candidate.statistics.recent_unique_badges, candidate.site.site_id))
+            def rank(candidate: RecommendationCandidate) -> tuple[int, bool, str]:
+                preference = 0
+                profile = snapshot.visitor_profile
+                if profile is not None:
+                    preferred = {"history": "A", "photography": "B", "poetry": "C"}[profile.interest]
+                    preference += 3 if candidate.site.site_id == preferred else 0
+                    preference += 1 if profile.party == "family" and candidate.site.site_id == "A" else 0
+                    preference += 1 if (profile.pace == "relaxed" or profile.party == "older") and candidate.site.site_id == "C" else 0
+                return (candidate.statistics.recent_unique_badges - preference, candidate.visited, candidate.site.site_id)
+            selected = min(snapshot.candidates, key=rank) if snapshot.visitor_profile is not None else min(
+                snapshot.candidates, key=lambda candidate: (candidate.visited,
+                    candidate.statistics.recent_unique_badges, candidate.site.site_id))
             prefix = RULE_PREFIXES[reason]
             explanation = (f"{prefix}；这是演示规则建议，优先尚未到访、近期打卡较少的有效候选。"
                            f"{selected.site.name} 最近五分钟 {selected.statistics.recent_unique_badges} 枚腰牌。")
+            if snapshot.visitor_profile is not None:
+                explanation = f"{prefix}；结合你填写的同行情况、兴趣、游览节奏和节点热度提供规则建议。"
+                heat_name = {"low": "低", "medium": "中", "high": "高", "insufficient": "数据不足"}[selected.statistics.heat]
+                explanation += f"{selected.site.name}的输入热度为{heat_name}。"
             if not selected.site.game_available:
                 explanation += "该点小游戏尚未接入，只有地图与内容示意。"
             return RecommendationResult(snapshot_id=snapshot.snapshot_id, source="rule_fallback",

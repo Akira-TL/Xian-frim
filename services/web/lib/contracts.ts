@@ -157,6 +157,16 @@ export const siteCatalogSchema = z.strictObject({
   sites: z.array(siteDefinitionSchema).length(3),
 }).refine(value => new Set(value.sites.map(site => site.site_id)).size === 3, "节点配置不完整");
 export type SiteCatalog = z.infer<typeof siteCatalogSchema>;
+export const visitorProfileSchema = z.strictObject({
+  party: z.enum(["family", "friends", "older", "solo"]),
+  interest: z.enum(["history", "photography", "poetry"]), pace: z.enum(["relaxed", "normal"]),
+});
+export const guideRequestSchema = z.strictObject({start_site: siteId, visitor_profile: visitorProfileSchema,
+  data_source: z.enum(["physical_scan_simulated_site", "generated_simulation"]),
+  crowd_scenario: z.enum(["balanced", "gate_busy", "courtyard_busy"]),
+});
+export type VisitorProfile = z.infer<typeof visitorProfileSchema>;
+export type GuideRequest = z.infer<typeof guideRequestSchema>;
 
 export const recommendationRequestSchema = z.strictObject({ badge_id: id, event_id: commandId });
 const recommendationInputSchema = z.strictObject({
@@ -167,6 +177,7 @@ const recommendationInputSchema = z.strictObject({
   progress_verified_at: date.nullable(), candidates: z.array(z.strictObject({
     site: siteDefinitionSchema, statistics: siteStatisticsSchema, visited: z.boolean(),
   })).max(2),
+  visitor_profile: visitorProfileSchema.nullable().optional(),
 }).refine(value => new Set(value.visited_sites).size === value.visited_sites.length
   && new Set(value.candidates.map(candidate => candidate.site.site_id)).size === value.candidates.length
   && Date.parse(value.generated_at) < Date.parse(value.expires_at)

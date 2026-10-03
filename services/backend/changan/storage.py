@@ -229,8 +229,14 @@ class Repository:
             row = db.execute("SELECT audit_json FROM recommendation_audits WHERE snapshot_id=?",
                              (snapshot_id,)).fetchone()
             if row is None:
+                row = db.execute("SELECT audit_json FROM guide_recommendations WHERE snapshot_id=?", (snapshot_id,)).fetchone()
+            if row is None:
                 raise BusinessError(404, "该推荐没有审计记录，不补造历史证据")
             return row["audit_json"]
+
+    def save_guide_recommendation(self, snapshot_id: str, result_json: str, audit_json: str) -> None:
+        with self.connection(write=True) as db:
+            db.execute("INSERT INTO guide_recommendations VALUES (?, ?, ?)", (snapshot_id, result_json, audit_json))
 
     def save_recommendation_rejection(self, snapshot_id: str, rejection_json: str) -> None:
         with self.connection(write=True) as db:
@@ -244,6 +250,8 @@ class Repository:
     def recommendation_json(self, snapshot_id: str) -> str:
         with self.connection() as db:
             row = db.execute("SELECT result_json FROM recommendations WHERE snapshot_id=?", (snapshot_id,)).fetchone()
+            if row is None:
+                row = db.execute("SELECT result_json FROM guide_recommendations WHERE snapshot_id=?", (snapshot_id,)).fetchone()
             if row is None:
                 raise BusinessError(404, "推荐快照不存在")
             return row["result_json"]

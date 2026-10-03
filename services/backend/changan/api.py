@@ -24,6 +24,7 @@ from .simulation import ScenarioRequest, ScenarioResult, simulate
 from .catalog import SiteCatalog, default_catalog
 from .deepseek import load_deepseek
 from .recommendations import RecommendationAudit, RecommendationModel, RecommendationRecord, RecommendationRejection, RecommendationRequest, RecommendationResult, RecommendationService
+from .recommendations import GuideRequest
 
 
 def create_app(db_path: Path, operator_token: str, terminal_token: str,
@@ -79,6 +80,10 @@ def create_app(db_path: Path, operator_token: str, terminal_token: str,
     @app.post("/api/v1/recommendations", dependencies=[Depends(operator)])
     async def recommend(request: RecommendationRequest) -> RecommendationResult:
         return await recommendations.create(request, clock)
+
+    @app.post("/api/v1/guide-recommendations", dependencies=[Depends(operator)])
+    async def recommend_guide(request: GuideRequest) -> RecommendationResult:
+        return await recommendations.create_guide(request, clock)
 
     @app.get("/api/v1/recommendations/{snapshot_id}", dependencies=[Depends(reader)])
     def recommendation_record(snapshot_id: str) -> RecommendationRecord:
