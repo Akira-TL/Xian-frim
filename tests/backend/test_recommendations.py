@@ -49,7 +49,7 @@ def test_unconfigured_ai_returns_labelled_rule_suggestion_from_fresh_candidates(
     assert result["selected_site"] == "B"
     assert [candidate["site"]["site_id"] for candidate in result["input"]["candidates"]] == ["B", "C"]
     assert "长安城门" in result["child_text"]
-    assert "小游戏尚未接入" in result["operator_reason"]
+    assert "小游戏尚未接入" not in result["operator_reason"]
     assert result["input"]["completed_games"] == []
 
 

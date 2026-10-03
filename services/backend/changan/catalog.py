@@ -1,4 +1,4 @@
-"""三节点演示园区配置；不代表真实景区或已部署的扩展小游戏。"""
+"""三节点演示园区配置；不代表真实地理路径或新增游戏的扫码认证链路。"""
 
 from typing import Annotated, Literal, Self
 
@@ -23,8 +23,6 @@ class SiteDefinition(Contract):
     def validate_connections(self) -> Self:
         if self.site_id in self.reachable_sites or len(set(self.reachable_sites)) != len(self.reachable_sites):
             raise ValueError("可达节点不能包含自身或重复项")
-        if self.game_available and self.game_id != "qin_formation":
-            raise ValueError("首版只有秦俑归阵小游戏已接入")
         return self
 
 
@@ -49,8 +47,8 @@ def default_catalog() -> SiteCatalog:
                        task_prompt="在圆屏腰牌上完成三片拼接，收藏秦俑奖励", game_id="qin_formation", game_available=True),
         SiteDefinition(site_id="B", name="长安城门", x=0.5, y=0.2, is_open=True,
                        reachable_sites=["A", "C"], task_name="城门寻宝",
-                       task_prompt="观察城门图案；内容示意，触摸小游戏尚未接入", game_id="gate_search", game_available=False),
+                       task_prompt="本地演示：按提示找城门、旗与鼓，收藏长安城门；不代表到访解锁", game_id="gate_search", game_available=True),
         SiteDefinition(site_id="C", name="诗意庭院", x=0.85, y=0.65, is_open=True,
                        reachable_sites=["A", "B"], task_name="诗句补全",
-                       task_prompt="观察庭院文字；内容示意，触摸小游戏尚未接入", game_id="poem_completion", game_available=False),
+                       task_prompt="本地演示：补全两句唐诗，收藏诗意长安；不代表到访解锁", game_id="poem_completion", game_available=True),
     ])

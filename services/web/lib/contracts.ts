@@ -149,8 +149,7 @@ export const siteDefinitionSchema = z.strictObject({
   task_name: z.string().min(1).max(32), task_prompt: z.string().min(1).max(120),
   game_id: z.enum(["qin_formation", "gate_search", "poem_completion"]), game_available: z.boolean(),
 }).refine(value => !value.reachable_sites.includes(value.site_id)
-  && new Set(value.reachable_sites).size === value.reachable_sites.length
-  && (!value.game_available || value.game_id === "qin_formation"), "节点配置不满足首版可用性约束");
+  && new Set(value.reachable_sites).size === value.reachable_sites.length, "节点配置可达关系不一致");
 export const siteCatalogSchema = z.strictObject({
   version: z.number().int().positive(), source: z.literal("demo_site_configuration"), geographic_map: z.literal(false),
   heat_thresholds: heatThresholdsSchema.default({ medium_min: 3, high_min: 6 }),
