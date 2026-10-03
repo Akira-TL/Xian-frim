@@ -115,7 +115,7 @@ export default function OperatorPanel() {
   }
   const steps = [{ name: "解锁", done: progress?.unlocked, Icon: LockOpenRounded }, { name: "通关", done: progress?.completed, Icon: SportsEsportsRounded },
     { name: "收藏", done: progress?.collected, Icon: CollectionsBookmarkRounded }, { name: "展示", done: progress?.exhibiting, Icon: ImageRounded }];
-  return <main className="visitor-app">
+  return <main className={`visitor-app${runtime?.screen ? " has-runtime" : ""}`}>
     <header className="visitor-header"><h1>长安游迹</h1>
       <Image src="/xks/images/changan-gate-v3.webp" width={780} height={260} alt="云山间的长安城门" priority className="visitor-landscape" />
     </header>
