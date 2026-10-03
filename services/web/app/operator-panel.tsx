@@ -6,6 +6,7 @@ import { badgeSchema, type Badge, type Command, type DeviceState, type Visit } f
 import { BadgeControl, type ControlPhase } from "../lib/badge-control";
 import { bluetoothSupport, connectBadge } from "../lib/web-bluetooth";
 import RecommendationPanel from "./recommendation-panel";
+import ActivityOverview from "./activity-overview";
 
 const siteNames = { A: "秦俑工坊", B: "长安城门", C: "诗意庭院" };
 const commandNames = { pending: "待发送", sent: "已发送，执行未确认", confirmed: "设备已确认执行", unknown: "结果未确认", failed: "请求失败" };
@@ -118,6 +119,7 @@ export default function OperatorPanel() {
       <p className="mt-3 text-sm leading-6 text-stone-600" role="status">{notice}</p>
       {unsupported && <p className="mt-3 text-sm text-amber-800">{unsupported}</p>}
     </section>
+    <ActivityOverview />
     <section className="mb-6 rounded-2xl bg-white p-5" aria-label="腰牌连接与进度">
       <h2 className="text-xl font-semibold">腰牌连接与进度</h2>
       <p className="my-3 text-sm text-stone-600">无需到访即可核对已登记腰牌、读取认证进度；连接和查询不会解锁游戏。</p>
