@@ -56,9 +56,9 @@ static lv_obj_t *label(const char *text, int y)
 
 static void title(const char *text)
 {
-    lv_obj_t *object = label(text, 40);
-    lv_obj_set_style_transform_scale_x(object, 384, 0);
-    lv_obj_set_style_transform_scale_y(object, 384, 0);
+    lv_obj_t *object = label(text, 34);
+    lv_obj_set_style_transform_scale_x(object, 448, 0);
+    lv_obj_set_style_transform_scale_y(object, 448, 0);
     lv_obj_set_style_text_letter_space(object, 2, 0);
 }
 
@@ -369,11 +369,11 @@ static void render(void)
     } else {
         lv_obj_t *art = lv_obj_create(pg.root);
         lv_obj_remove_style_all(art);
-        lv_obj_set_pos(art, 124, 74);
-        lv_obj_set_size(art, 112, 112);
+        lv_obj_set_pos(art, 116, 65);
+        lv_obj_set_size(art, 128, 128);
         lv_obj_clear_flag(art, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-        qin_art_add(art, QIN_ART_GUARDIAN, 112, 112);
-        lv_obj_t *status = label(pg.notice ? pg.notice : (pg.progress.unlocked ? "秦俑归阵" : "扫码解锁游戏"), 188);
+        qin_art_add(art, QIN_ART_GUARDIAN, 128, 128);
+        lv_obj_t *status = label(pg.notice ? pg.notice : (pg.progress.unlocked ? "秦俑归阵" : "扫码解锁游戏"), 194);
         lv_obj_set_style_text_color(status, lv_color_hex(0x6e654d), 0);
         lv_obj_t *play = button(pg.progress.completed ? "再玩一次" : "开始游戏", 70, 220, 220, navigate, VIEW_GAME);
         lv_obj_set_height(play, 50);
@@ -417,6 +417,11 @@ static void load(page_base_t *self)
     lv_obj_set_style_bg_opa(pg.root, LV_OPA_COVER, 0);
     lv_obj_set_style_text_color(pg.root, lv_color_hex(0x263e30), 0);
     lv_obj_set_style_text_font(pg.root, &font_puhui_18_4, 0);
+    lv_obj_set_style_radius(pg.root, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_clip_corner(pg.root, true, 0);
+    lv_obj_set_style_border_color(pg.root, lv_color_hex(0xb99861), 0);
+    lv_obj_set_style_border_width(pg.root, 2, 0);
+    lv_obj_set_style_border_post(pg.root, true, 0);
     lv_obj_clear_flag(pg.root, LV_OBJ_FLAG_SCROLLABLE);
     render();
     pg.timer = lv_timer_create(poll, 300, NULL);
