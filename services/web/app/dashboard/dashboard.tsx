@@ -7,6 +7,7 @@ import { sourceSchema, type ActivitySnapshot, type DataSource, type SiteCatalog 
 import ScenarioPanel from "./scenario-panel";
 import RecommendationChooser from "./recommendation-chooser";
 import SiteMap from "./site-map";
+import VisitTrend from "./visit-trend";
 
 const siteNames = { A: "秦俑工坊", B: "长安城门", C: "诗意庭院" };
 const statusNames = { fresh: "数据新鲜", stale: "数据已过时", missing: "尚无数据", untrusted: "时间不可靠" };
@@ -147,6 +148,7 @@ export default function Dashboard() {
       <div className="grid gap-6 lg:grid-cols-2">
         <section className={panel}><h2 className="text-xl font-semibold">固定窗口到访趋势</h2>
           <p className="mt-1 text-sm text-stone-600">单位：枚不同腰牌 / 五分钟。仅纳入时间可靠的事件；零表示该窗口无合格记录，不表示现场无人。</p>
+          <VisitTrend map={map} offline={offline} />
           <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm">
             <thead><tr><th className="py-2">时间窗（左开右闭）</th>{map.sites.map(site => <th key={site.site_id}>{site.site_id} · {siteNames[site.site_id]}</th>)}</tr></thead>
             <tbody>{windows.map(window => <tr className="border-t" key={window.window_start}>
