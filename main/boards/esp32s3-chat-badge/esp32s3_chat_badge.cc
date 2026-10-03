@@ -40,13 +40,11 @@ extern "C"
 }
 #define TAG "CustomBoard"
 
-extern const lv_image_dsc_t logo;
-
-static void ShowBootLogo()
+static void PrepareGameScreen()
 {
   if (!lvgl_port_lock(pdMS_TO_TICKS(1000)))
   {
-    ESP_LOGW(TAG, "ShowBootLogo: failed to lock LVGL");
+    ESP_LOGW(TAG, "PrepareGameScreen: failed to lock LVGL");
     return;
   }
 
@@ -56,9 +54,6 @@ static void ShowBootLogo()
     lv_obj_set_style_bg_color(screen, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
 
-    lv_obj_t *img = lv_image_create(screen);
-    lv_image_set_src(img, &logo);
-    lv_obj_align(img, LV_ALIGN_CENTER, 0, 0);
   }
 
   lvgl_port_unlock();
@@ -169,8 +164,8 @@ public:
   {
     // Initialize SPI LCD display (copied from SpiLcdDisplay constructor)
 
-    // Draw white screen
-    std::vector<uint16_t> buffer(width, 0xFFFF);
+    // 游戏界面就绪前只清黑屏，不展示旧固件图片。
+    std::vector<uint16_t> buffer(width, 0x0000);
     for (int y = 0; y < height; y++)
     {
       esp_lcd_panel_draw_bitmap(panel_, 0, y, width, y + 1, buffer.data());
@@ -256,7 +251,7 @@ public:
       lv_display_set_offset(display_, offset_x, offset_y);
     }
 
-    ShowBootLogo();
+    PrepareGameScreen();
   }
 
   void SetEmotion(const char *emotion) override

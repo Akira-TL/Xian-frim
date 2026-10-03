@@ -156,11 +156,7 @@ void WifiBoard::EnterWifiConfigMode()
     hint += "\n\n";
 
     auto display = Board::GetInstance().GetDisplay();
-    if (display && display->height() > 64)
-    {
-        page_change("wifi_config");
-        wifi_config_view_set_ap_hint(hint.c_str());
-    }
+    // 保留配网服务和语音提示，但不进入原版配网页覆盖游戏。
 
     // 播报配置 WiFi 的提示
     application.Alert(Lang::Strings::WIFI_CONFIG_MODE, hint.c_str(), "", Lang::Sounds::OGG_WIFICONFIG_AP);

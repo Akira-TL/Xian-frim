@@ -36,9 +36,10 @@ file(GLOB DISPLAY_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/display/*.c ${CMAKE_CURREN
 # Services 相关源文件
 file(GLOB SERVICES_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/services/*/*.c ${CMAKE_CURRENT_SOURCE_DIR}/services/*/*.cc)
 
-# 排除音乐相关文件和 alarm_setting
-list(FILTER DISPLAY_SOURCES EXCLUDE REGEX ".*/music/.*")
-list(FILTER DISPLAY_SOURCES EXCLUDE REGEX ".*/alarm_setting/.*")
+# 腰牌只安装游戏页面；旧首页、图片、动画和旧设置不进入本产品构建。
+list(FILTER DISPLAY_SOURCES EXCLUDE REGEX ".*/display/page/.*")
+file(GLOB GAME_PAGE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/display/page/exploration/*.c)
+list(APPEND DISPLAY_SOURCES ${GAME_PAGE_SOURCES})
 
 list(APPEND SOURCES ${DISPLAY_SOURCES})
 list(APPEND SOURCES ${SERVICES_SOURCES})

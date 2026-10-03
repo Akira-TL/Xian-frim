@@ -472,47 +472,8 @@ void ble_json_rx(const char *line)
         doit_file_rescan_materials();
         ESP_LOGI(TAG, "调用 doit_file_rescan_materials() 后");
 
-        ESP_LOGI(TAG, "检查文件类型: dir_name=%s", dir_name);
-        if (strcmp(dir_name, "animal") == 0)
-        {
-            // 下载的是VPG动画
-            doit_file_set_type(MATERIAL_TYPE_VPG);
-            ESP_LOGI(TAG, "Switching to latest VPG file...");
-            doit_file_switch_to_latest();
-
-            const char *current_page = get_current_page_name();
-            if (current_page == NULL || strcmp(current_page, "animation") != 0)
-            {
-                ESP_LOGI(TAG, "Switching to animation page...");
-                page_change("animation");
-            }
-            else
-            {
-                ESP_LOGI(TAG, "Already on animation page, calling refresh directly");
-                extern void animation_view_refresh_vpg(void);
-                animation_view_refresh_vpg();
-            }
-        }
-        else
-        {
-            // 下载的是图片
-            doit_file_set_type(MATERIAL_TYPE_IMG);
-            ESP_LOGI(TAG, "Switching to latest image file...");
-            doit_file_switch_to_latest();
-
-            const char *current_page = get_current_page_name();
-            if (current_page == NULL || strcmp(current_page, "home") != 0)
-            {
-                ESP_LOGI(TAG, "Switching to home page...");
-                page_change("home");
-            }
-            else
-            {
-                ESP_LOGI(TAG, "Already on home page, calling refresh directly");
-                extern void home_view_refresh_image(void);
-                home_view_refresh_image();
-            }
-        }
+        // 素材下载只保存文件，不再选中或刷新原版图片、动画页面。
+        // 游戏奖励图片通过项目构建入口接入，下载不能打断当前游戏。
 
         ESP_LOGI(TAG, "✅ 下载流程完成，发送成功通知");
         ble_json_notify(BLE_RESP_OK);

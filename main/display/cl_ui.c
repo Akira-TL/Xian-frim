@@ -61,7 +61,8 @@ static void _page_install()
 }
 
 int page_change(const char* name){
-
+    // 旧蓝牙、USB、语音回调不能把游戏带回原版首页或图片页。
+    if (!name || strcmp(name, "exploration") != 0 || !g_page_manager) return -1;
     if (!lvgl_port_lock(pdMS_TO_TICKS(1000)))
     {
         LOGE("page_change: 无法获取 LVGL 锁");
@@ -78,6 +79,11 @@ int page_change(const char* name){
     LOGD("切换页面:%s", name);
 
     page_base_t *current_page = get_stack_top(g_page_manager);
+    if (current_page == page) {
+        // 重复请求同一页面不卸载它，保留游戏视图和正在拼接的状态。
+        lvgl_port_unlock();
+        return 1;
+    }
     if (current_page != NULL && current_page->root != NULL)
     {
         lv_obj_add_flag(current_page->root, LV_OBJ_FLAG_HIDDEN);
@@ -209,14 +215,8 @@ void ui_key_msg(cl_button_t *e, void *arg){
 
 void wakeup_ai(){
 #ifndef SIMULATOR    
-    lvgl_port_lock(0);
-    page_base_t *page = get_stack_top(g_page_manager);
-    // vb_music_play(0);
-    if (strcmp(page->name, "home") != 0)
-    {
-        page_change("home");
-    }
-    lvgl_port_unlock();
+    // 语音唤醒不切换界面；同页请求由 page_change 保证不会重载游戏。
+    page_change("exploration");
 #endif
 }
 
@@ -238,9 +238,5 @@ void ui_init(){
 #endif
     _page_install();
     ui_get_home();
-#ifdef SIMULATOR
-    page_change("setting");
-#else
-    page_change("startup");
-#endif
+    page_change("exploration");
 }
