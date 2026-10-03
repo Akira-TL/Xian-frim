@@ -219,7 +219,7 @@ class Repository:
                 raise BusinessError(404, "推荐快照不存在")
             return row["result_json"]
 
-    def activity_observations(self) -> tuple[list[Visit], list[HeartbeatReceipt], DeviceProgressSummary]:
+    def activity_observations(self, source: Source = Source.PHYSICAL) -> tuple[list[Visit], list[HeartbeatReceipt], DeviceProgressSummary]:
         # 地图与设备进度必须来自同一读取事务。
         with self.connection() as db:
             db.execute("BEGIN")
@@ -237,7 +237,7 @@ class Repository:
                        COALESCE(SUM((p.flags & 8) != 0), 0) AS exhibiting_badges,
                        MAX(p.verified_at) AS last_verified_at
                 FROM eligible e LEFT JOIN verified_progress p ON p.badge_id = e.badge_id
-            """, (Source.PHYSICAL,)).fetchone()
+            """, (source,)).fetchone()
             progress = DeviceProgressSummary(
                 eligible_badges=row["eligible_badges"], verified_badges=row["verified_badges"],
                 unlocked_badges=row["unlocked_badges"], completed_badges=row["completed_badges"],

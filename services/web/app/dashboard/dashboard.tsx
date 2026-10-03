@@ -114,7 +114,9 @@ export default function Dashboard() {
           </section>
           <section className={panel}><h2 className="text-xl font-semibold">《秦俑归阵》认证进度</h2>
             {!progress ? <p className="mt-3">生成模拟数据不适用实物进度统计。</p> : <>
-              <p className="mt-2 text-sm text-stone-600">仅统计本会话有 A 点实物来源到访的腰牌；状态为后台最后认证记录，不表示设备在线。</p>
+              <p className="mt-2 text-sm text-stone-600">{source === "interface_test"
+                ? "仅统计本会话有 A 点接口测试记录的腰牌，不计真实到访；设备状态来自真实认证回执。"
+                : "仅统计本会话有 A 点实物来源到访的腰牌。"}状态为后台最后认证记录，不表示设备在线。</p>
               <dl className="mt-4 grid grid-cols-3 gap-3">{[
                 ["符合到访条件", progress.eligible_badges], ["已认证状态", progress.verified_badges],
                 ["设备确认解锁", progress.unlocked_badges], ["设备确认完成", progress.completed_badges],

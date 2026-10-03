@@ -62,7 +62,7 @@ const progressSummarySchema = z.strictObject({
   && value.collected_badges === value.completed_badges && value.exhibiting_badges <= value.collected_badges,
 "认证计数不满足游戏进度约束");
 export const activitySchema = z.strictObject({ map: mapSchema, progress: progressSummarySchema.nullable() })
-  .refine(value => (value.map.source !== "physical_scan_simulated_site") === (value.progress === null),
+  .refine(value => (value.map.source === "generated_simulation") === (value.progress === null),
     "模拟来源不能包含实物游戏进度");
 export type ActivitySnapshot = z.infer<typeof activitySchema>;
 export type DataSource = z.infer<typeof sourceSchema>;

@@ -57,3 +57,23 @@ def test_activity_is_staff_only_and_rejects_unknown_source(client: TestClient) -
     assert client.get("/api/v1/activity").status_code == 401
     assert client.get("/api/v1/activity", headers=terminal()).status_code == 401
     assert client.get("/api/v1/activity?source=unknown", headers=operator()).status_code == 422
+
+
+def test_interface_test_progress_is_authenticated_and_source_filtered(device_client: TestClient) -> None:
+    register(device_client, "physical-only", "esp32-physical-only")
+    post_scan(device_client, scan("physical-only-event").model_copy(update={"badge_id": "physical-only"}))
+    payload = scan("test-progress-event").model_dump_json().replace('"k230-001"', '"interface-test-001"')
+    assert device_client.post("/api/v1/interface-test/visits", content=payload, headers=operator()).status_code == 200
+    before = device_client.get("/api/v1/activity?source=interface_test", headers=operator()).json()
+    assert before["progress"] is not None
+    assert before["progress"]["eligible_badges"] == 1
+    assert before["progress"]["verified_badges"] == 0
+    assert submit(device_client, report(authorize(device_client), 15)).status_code == 200
+    after = device_client.get("/api/v1/activity?source=interface_test", headers=operator()).json()["progress"]
+    assert after == {
+        "game_id": "qin_formation", "eligible_badges": 1, "verified_badges": 1,
+        "unlocked_badges": 1, "completed_badges": 1, "collected_badges": 1,
+        "exhibiting_badges": 1, "last_verified_at": "2026-10-02T14:00:00Z",
+    }
+    assert device_client.get("/api/v1/activity", headers=operator()).json()["progress"]["eligible_badges"] == 2
+    assert device_client.get("/api/v1/activity?source=generated_simulation", headers=operator()).json()["progress"] is None

@@ -135,9 +135,9 @@ def create_app(db_path: Path, operator_token: str, terminal_token: str,
 
     @app.get("/api/v1/activity", dependencies=[Depends(operator)])
     def activity_snapshot(source: Source = Source.PHYSICAL) -> ActivitySnapshot:
-        visits, heartbeats, progress = repository.activity_observations()
+        visits, heartbeats, progress = repository.activity_observations(source)
         return ActivitySnapshot(map=build_map(visits, heartbeats, clock(), source, catalog.heat_thresholds),
-                                progress=progress if source == Source.PHYSICAL else None)
+                                progress=progress if source != Source.GENERATED else None)
 
     @app.post("/api/v1/simulation", dependencies=[Depends(operator)])
     def scenario(request: ScenarioRequest) -> ScenarioResult:

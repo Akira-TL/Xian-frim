@@ -115,7 +115,8 @@ def test_interface_test_identity_roles_and_retry_remain_separate(client: TestCli
     assert client.post("/api/v1/unlock-commands", content=wrong.model_dump_json(), headers=operator()).status_code == 409
     assert client.get("/api/v1/unlock-commands", headers=operator()).json() == []
     tested = client.get("/api/v1/activity?source=interface_test", headers=operator()).json()
-    assert tested["progress"] is None
+    assert tested["progress"]["eligible_badges"] == 1
+    assert tested["progress"]["verified_badges"] == 0
     assert tested["map"]["sites"][0]["recent_unique_badges"] == 1
 
 
