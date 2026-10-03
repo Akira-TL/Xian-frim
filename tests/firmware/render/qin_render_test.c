@@ -92,8 +92,9 @@ int main(void)
     passed &= renders_visible_image(display, QIN_ART_BODY, "身体", 72, 46);
     passed &= renders_visible_image(display, QIN_ART_LEGS, "腿部", 72, 46);
     passed &= renders_visible_image(display, QIN_ART_REWARD, "收藏奖励", 200, 160);
+    passed &= renders_visible_image(display, QIN_ART_GUARDIAN, "首页秦俑", 128, 128);
     passed &= renders_persistent_correct_outline(display);
     if(!passed) return 1;
-    puts("通过：四张正式素材均经真实绘制入口产生可见像素；不替代实物显示和触摸验收");
+    puts("通过：五张正式素材均经真实绘制入口产生可见像素；不替代实物显示和触摸验收");
     return 0;
 }
