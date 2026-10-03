@@ -2,8 +2,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { api } from "../lib/api";
-import type { Badge, BadgeRuntime, DeviceState, Visit } from "../lib/contracts";
-import { BadgeControl } from "../lib/badge-control";
+import type { BadgeRuntime } from "../lib/contracts";
+import type { BadgeLink } from "../lib/badge-control";
+import { readDemoSnapshot } from "../lib/demo-badge";
 import { bluetoothSupport, connectBadge } from "../lib/web-bluetooth";
 import VisitorRouteGuide from "./visitor-route-guide";
 import ActivityOverview from "./activity-overview";
@@ -11,7 +12,6 @@ import BarChartRounded from "@mui/icons-material/BarChartRounded";
 import ExploreRounded from "@mui/icons-material/ExploreRounded";
 import CollectionsBookmarkRounded from "@mui/icons-material/CollectionsBookmarkRounded";
 import RouteRounded from "@mui/icons-material/RouteRounded";
-import LockOpenRounded from "@mui/icons-material/LockOpenRounded";
 import SportsEsportsRounded from "@mui/icons-material/SportsEsportsRounded";
 import ImageRounded from "@mui/icons-material/ImageRounded";
 import CheckCircleRounded from "@mui/icons-material/CheckCircleRounded";
@@ -31,32 +31,25 @@ const games = {
   poem_completion: {name: "诗句补全", reward: "诗意长安", image: "/xks/images/poem-game-v1.webp", total: 2},
 };
 export default function OperatorPanel() {
-  const [badges, setBadges] = useState<Badge[]>([]);
-  const [visits, setVisits] = useState<Visit[]>([]);
-  const [badgeId, setBadgeId] = useState("");
   const [tab, setTab] = useState<Tab>("explore");
   const [connectionOpen, setConnectionOpen] = useState(false);
   const [featured, setFeatured] = useState<keyof typeof games>("qin_formation");
   const [online, setOnline] = useState(false);
   const [busy, setBusy] = useState(false);
   const [connected, setConnected] = useState(false);
-  const [progress, setProgress] = useState<DeviceState>();
+  const [progress, setProgress] = useState<BadgeRuntime>();
   const [runtime, setRuntime] = useState<BadgeRuntime>();
   const [notice, setNotice] = useState("");
   const [unsupported, setUnsupported] = useState<string>();
-  const control = useRef<BadgeControl | undefined>(undefined);
+  const control = useRef<BadgeLink | undefined>(undefined);
   const generation = useRef(0);
   const locked = useRef(false);
-  const badge = badges.find(item => item.badge_id === badgeId);
-  const latestVisit = visits.filter(item => item.badge_id === badgeId && item.source !== "generated_simulation")
-    .sort((a, b) => Date.parse(b.captured_at) - Date.parse(a.captured_at))[0];
   function disconnect() {
     generation.current += 1; control.current?.close(); control.current = undefined;
     setConnected(false); setProgress(undefined); setRuntime(undefined);
   }
   const refresh = useCallback(async () => {
-    const [registered, arrived] = await Promise.all([api.badges(), api.visits()]);
-    setBadges(registered); setVisits(arrived); setOnline(true);
+    await api.sites(); setOnline(true);
   }, []);
   useEffect(() => {
     let active = true;
@@ -69,20 +62,15 @@ export default function OperatorPanel() {
     if (!connected) return;
     const current = generation.current;
     let stopped = false;
-    let polls = 0;
     const poll = async () => {
       const session = control.current;
       if (stopped || document.hidden || locked.current || !session) return;
       locked.current = true;
       try {
-        const live = await session.runtime();
+        const live = await readDemoSnapshot(session);
         if (stopped || current !== generation.current) return;
         setRuntime(live);
-        // 秦俑认证进度只由签名回读更新；新增游戏独立显示本地实时收藏。
-        if (++polls % 3 === 0 || live?.screen === "result") {
-          const verified = await session.sync();
-          if (!stopped && current === generation.current) setProgress(verified);
-        }
+        setProgress(live);
       } catch {
         if (!stopped && current === generation.current) {
           generation.current += 1; session.close(); control.current = undefined;
@@ -96,27 +84,26 @@ export default function OperatorPanel() {
     return () => { stopped = true; clearInterval(timer); };
   }, [connected]);
   async function connect() {
-    if (!badge) throw new Error("请先选择腰牌");
     disconnect(); const current = generation.current;
     const link = await connectBadge(() => {
       if (current === generation.current) { disconnect(); setNotice("连接已断开，请重新连接"); }
-    });
-    if (current !== generation.current) { link.close(); throw new Error("请重新选择腰牌"); }
-    const session = new BadgeControl(badge, link, api, {demoMode: true}); control.current = session;
+    }, {snapshotOnly:true});
+    if (current !== generation.current) { link.close(); throw new Error("连接已失效，请重试"); }
+    control.current = link;
     try {
-      const state = await session.sync();
+      const state = await readDemoSnapshot(link);
       if (current !== generation.current) throw new Error("连接已失效，请重试");
-      setProgress(state); setConnected(true); setNotice("");
+      setProgress(state); setRuntime(state); setConnected(true); setNotice("");
     } catch (error) { disconnect(); throw error; }
   }
-  async function sync(unlock = false) {
+  async function sync() {
     const session = control.current;
     if (!session || !connected) throw new Error("请先连接腰牌");
     const current = generation.current;
     try {
-      const state = await (unlock && latestVisit ? session.unlock(latestVisit) : session.sync());
+      const state = await readDemoSnapshot(session);
       if (current !== generation.current) throw new Error("连接已失效，请重试");
-      setProgress(state); setNotice(unlock ? "游戏已解锁，在腰牌上开始吧" : "进度已同步");
+      setProgress(state); setRuntime(state); setNotice("进度已同步");
     } catch (error) { disconnect(); throw error; }
   }
   async function operate(action: () => Promise<void>) {
@@ -124,14 +111,6 @@ export default function OperatorPanel() {
     locked.current = true; setBusy(true); setNotice("");
     try { await action(); } catch (error) { setNotice(error instanceof Error ? error.message : "操作未完成，请重试"); }
     finally { locked.current = false; setBusy(false); }
-  }
-  async function prepareTestVisit() {
-    if (!badge || !connected || progress?.unlocked) throw new Error("先连接尚未解锁的腰牌");
-    const result = await api.testVisit(badge.badge_id);
-    if (result.visit.badge_id !== badge.badge_id || result.visit.source !== "interface_test"
-      || result.visit.site_id !== "A" || !result.can_unlock) throw new Error("测试打卡未满足演示解锁条件");
-    setVisits(previous => [result.visit, ...previous.filter(item => item.event_id !== result.visit.event_id)]);
-    setNotice("A点测试打卡已准备，不计真实到访；请点击解锁秦俑归阵");
   }
   const activeGame = games[runtime?.game_id ?? "qin_formation"];
   const liveStage = runtime?.v === 2 && runtime.game_id !== "qin_formation" ? runtime.stage :
@@ -154,7 +133,7 @@ export default function OperatorPanel() {
     {name: "游玩", done: liveStage > 0 || localGame.collected || runtime?.screen === "playing", Icon: SportsEsportsRounded},
     {name: "收藏", done: localGame.collected, Icon: CollectionsBookmarkRounded},
     {name: "展示", done: runtime?.v === 2 && runtime.exhibit_game === localGame.index, Icon: ImageRounded},
-  ] : [{ name: "解锁", done: progress?.unlocked, Icon: LockOpenRounded }, { name: "通关", done: progress?.completed, Icon: SportsEsportsRounded },
+  ] : [{ name: "通关", done: progress?.completed, Icon: SportsEsportsRounded },
     { name: "收藏", done: progress?.collected, Icon: CollectionsBookmarkRounded }, { name: "展示", done: runtime?.v === 2 ? runtime.exhibit_game === 0 : progress?.exhibiting, Icon: ImageRounded }];
   return <main className={`visitor-app display-app is-${tab}${runtime?.screen ? " has-runtime" : ""}`}>
     {tab === "explore" && <><header className="display-explore-hero">
@@ -166,16 +145,12 @@ export default function OperatorPanel() {
     </header>
     <section className={`visitor-badge display-connection${connectionOpen ? " is-open" : ""}`} aria-label="我的腰牌">
       <div className="display-connection-strip"><BluetoothRounded className="display-bluetooth" />
-        <div><h2>我的腰牌</h2><p>{connected ? `${badge?.display_number ?? ""}号 · 已连接` : "连接后同步收藏"}</p></div>
+        <div><h2>我的腰牌</h2><p>{connected ? "已连接 · 实时同步" : "连接后同步收藏"}</p></div>
         <button className="visitor-primary" aria-expanded={connectionOpen} aria-controls="badge-connection-details"
-          onClick={() => setConnectionOpen(value => !value)}>{connected ? "查看进度" : "连接腰牌"}</button>
+          disabled={busy || !!unsupported} onClick={() => {if (connected) setConnectionOpen(value => !value); else {setConnectionOpen(true); void operate(connect);}}}>{connected ? "查看进度" : "连接腰牌"}</button>
       </div>
       <div id="badge-connection-details" hidden={!connectionOpen}>
-      <div className="visitor-connection-row"><select aria-label="选择腰牌编号" value={badgeId} disabled={busy || !online}
-        onChange={event => { if (!locked.current) { disconnect(); setBadgeId(event.target.value); setNotice(""); } }}>
-        <option value="">选择编号</option>
-        {badges.filter(item => /^esp32s3-[0-9a-f]{12}$/.test(item.device_id)).map(item => <option key={item.badge_id} value={item.badge_id}>{item.display_number} 号</option>)}
-      </select><button className="visitor-primary" disabled={busy || !badge || !online || !!unsupported}
+      <div className="visitor-connection-row"><button className="visitor-primary" disabled={busy || !!unsupported}
         onClick={() => void operate(connected ? () => sync() : connect)}>{connected ? <SyncRounded fontSize="small" /> : <BluetoothRounded fontSize="small" />}{busy ? "处理中…" : connected ? "同步进度" : "连接腰牌"}</button></div>
       <ol className="visitor-steps" style={{gridTemplateColumns: `repeat(${steps.length}, 1fr)`}} aria-label={`${activeGame.name}进度`}>{steps.map(step => <li key={step.name}>
         <span className={`visitor-step-icon ${step.done ? "is-complete" : ""}`} role="img" aria-label={`${step.name}${step.done ? "已完成" : "未确认"}`}><step.Icon />{step.done && <CheckCircleRounded className="visitor-step-check" />}</span><span>{step.name}</span>
@@ -187,14 +162,7 @@ export default function OperatorPanel() {
           <span>{screenNames[runtime.screen]}{runtime.screen === "playing" ? ` · ${liveStage}/${activeGame.total}` : ""}</span></div>
         <span className="visitor-live-label">实时</span>
       </div>}
-      {connected && !progress?.unlocked && latestVisit?.site_id === "A" && <button className="visitor-primary visitor-unlock" disabled={busy || !online}
-        onClick={() => void operate(() => sync(true))}>解锁秦俑归阵{latestVisit.source === "interface_test" ? "（演示）" : ""}</button>}
-      {connected && !progress?.unlocked && <details className="guide-demo-settings"><summary>演示解锁</summary>
-        <p>没有现场扫码时，可创建A点测试打卡。不计真实到访，也不直接修改游戏进度。</p>
-        <button type="button" className="visitor-primary" disabled={busy || !online}
-          onClick={() => void operate(prepareTestVisit)}>创建A点测试打卡</button>
-      </details>}
-      {(notice || unsupported || !online) && <p className="visitor-notice" role="status">{unsupported || notice || "网络暂不可用"}</p>}
+      {(notice || unsupported) && <p className="visitor-notice" role="status">{unsupported || notice}</p>}
       </div>
     </section></>}
     {tab === "explore" && <section className="display-discover"><h2>带走一份长安</h2><p>在游戏里，遇见千年故事</p><div className="visitor-feature-grid">

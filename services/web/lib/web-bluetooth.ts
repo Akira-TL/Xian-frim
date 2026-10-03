@@ -12,7 +12,7 @@ export function bluetoothSupport(): string | undefined {
   return undefined;
 }
 
-export async function connectBadge(onDisconnect: () => void): Promise<BadgeLink> {
+export async function connectBadge(onDisconnect: () => void, options: {snapshotOnly?: boolean} = {}): Promise<BadgeLink> {
   const unavailable = bluetoothSupport();
   if (unavailable) throw new Error(unavailable);
   // 必须在用户点击事件中直接调用；不能放在后台轮询或先等待网络后调用。
@@ -29,8 +29,17 @@ export async function connectBadge(onDisconnect: () => void): Promise<BadgeLink>
   const setup = async (): Promise<BadgeLink> => {
     await device.gatt!.connect(); live();
     const service = await device.gatt!.getPrimaryService(activityService); live();
-    const identity = await service.getCharacteristic(characteristic("2")); live();
     const snapshot = await service.getCharacteristic(characteristic("3")); live();
+    const readSnapshot = async () => {
+      live();
+      const raw = await snapshot.readValue(); live();
+      return badgeRuntimeSchema.parse(JSON.parse(new TextDecoder("utf-8", {fatal:true}).decode(raw)));
+    };
+    if (options.snapshotOnly) {
+      const unused = async (): Promise<never> => { throw new Error("直接同步连接不使用授权控制命令"); };
+      return {snapshot:readSnapshot, close:disconnect, identity:unused, nonce:unused, write:unused, reply:unused};
+    }
+    const identity = await service.getCharacteristic(characteristic("2")); live();
     const nonce = await service.getCharacteristic(characteristic("4")); live();
     const control = await service.getCharacteristic(characteristic("5")); live();
     const reply = await service.getCharacteristic(characteristic("6")); live();
