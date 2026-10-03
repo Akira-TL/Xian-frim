@@ -119,6 +119,21 @@ def test_interface_test_identity_roles_and_retry_remain_separate(client: TestCli
     assert tested["map"]["sites"][0]["recent_unique_badges"] == 1
 
 
+def test_interface_test_time_is_server_recorded_not_phone_claimed(tmp_path: Path) -> None:
+    times = iter((NOW, NOW + timedelta(seconds=90)))
+    client = TestClient(create_app(tmp_path / "server-time.sqlite3", "operator-test", "terminal-test", lambda: next(times)))
+    register(client)
+    payload = scan("server-timed-test", 3600).model_copy(update={"time_quality": "untrusted"}).model_dump_json()
+    payload = payload.replace('"k230-001"', '"interface-test-001"')
+    response = client.post("/api/v1/interface-test/visits", content=payload, headers=operator())
+    assert response.status_code == 200
+    visit = Visit.model_validate(response.json()["visit"])
+    assert visit.captured_at == NOW and visit.received_at == NOW
+    assert visit.time_quality == "synced" and visit.source == "interface_test"
+    retry = client.post("/api/v1/interface-test/visits", content=payload, headers=operator())
+    assert retry.json()["duplicate"] is True and retry.json()["visit"] == response.json()["visit"]
+
+
 def test_terminal_switch_preserves_old_event_and_offline_config(client: TestClient) -> None:
     register(client)
     first = post_scan(client, scan())

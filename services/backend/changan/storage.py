@@ -88,7 +88,10 @@ class Repository:
 
     def scan(self, request: ScanRequest | InterfaceTestScanRequest, now: datetime, source: Source = Source.PHYSICAL) -> ScanResponse:
         payload_hash = sha256((source + request.model_dump_json()).encode()).hexdigest()
-        captured = request.captured_at.astimezone(timezone.utc)
+        # 接口测试是在后台创建的操作记录，不是手机离线采集的扫码事实。
+        # 哈希保留原始请求，重试不能因后台时间推进而冲突或改写首次记录。
+        captured = now if source == Source.INTERFACE_TEST else request.captured_at.astimezone(timezone.utc)
+        quality = "synced" if source == Source.INTERFACE_TEST else request.time_quality
         with self.connection(write=True) as db:
             receipt = db.execute("SELECT * FROM scan_receipts WHERE event_id = ?", (request.event_id,)).fetchone()
             if receipt:
@@ -107,9 +110,9 @@ class Repository:
                     raise BusinessError(409, "测试记录必须使用专用接口测试身份与 A 点")
             elif not config or config["site_id"] != request.site_id:
                 raise BusinessError(409, "终端地点与配置版本不匹配")
-            if request.time_quality == "synced" and captured > now + timedelta(seconds=30):
+            if quality == "synced" and captured > now + timedelta(seconds=30):
                 raise BusinessError(422, "采集时间超出允许的时钟偏差")
-            dedup_at = (captured if request.time_quality == "synced" else now).timestamp()
+            dedup_at = (captured if quality == "synced" else now).timestamp()
             existing = db.execute(
                 "SELECT * FROM visits WHERE session_id=? AND badge_id=? AND site_id=? AND source=? "
                 "AND dedup_at BETWEEN ? AND ? ORDER BY dedup_at, event_id LIMIT 1",
@@ -121,7 +124,7 @@ class Repository:
                     "INSERT INTO visits VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (visit_id, request.session_id, request.badge_id, request.terminal_id,
                      request.site_id, request.config_version, captured.isoformat(), now.isoformat(),
-                     request.time_quality, source, dedup_at),
+                     quality, source, dedup_at),
                 )
             db.execute("INSERT INTO scan_receipts VALUES (?, ?, ?)",
                        (request.event_id, payload_hash, visit_id))
