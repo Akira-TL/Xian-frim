@@ -171,6 +171,28 @@ class InvalidModel:
                 + '","child_text":"' + text + '","operator_reason":"测试外部错误输出"' + extra + '}')
 
 
+class UnverifiedCompletionModel:
+    async def recommend(self, snapshot: RecommendationInput) -> str:
+        return ('{"snapshot_id":"' + snapshot.snapshot_id
+                + '","selected_site":"B","child_text":"下一站去城门观察图案。",'
+                '"operator_reason":"快照显示已完成A站，因此建议去B站。"}')
+
+
+def test_model_cannot_turn_a_visit_without_verified_progress_into_completion(tmp_path: Path) -> None:
+    with TestClient(create_app(tmp_path / "false-completion.sqlite3", "operator-test", "terminal-test", lambda: NOW,
+                              recommendation_model=UnverifiedCompletionModel())) as client:
+        register(client)
+        post_scan(client, scan())
+        refresh_site(client, "B")
+        response = client.post("/api/v1/recommendations",
+                               content='{"badge_id":"badge-001","event_id":"scan-001"}', headers=operator())
+        assert response.status_code == 200
+        result = RecommendationResult.model_validate_json(response.text)
+        assert result.source == "rule_fallback" and result.fallback_reason == "invalid_output"
+        assert "已完成A站" not in result.operator_reason
+        assert result.input.completed_games == []
+
+
 @pytest.mark.parametrize("fault", ["non_json", "snapshot", "candidate", "blank", "long", "extra", "oversize"])
 def test_invalid_model_output_cannot_replace_valid_rule_or_unlock(tmp_path: Path, fault: str) -> None:
     with TestClient(create_app(tmp_path / "invalid.sqlite3", "operator-test", "terminal-test",

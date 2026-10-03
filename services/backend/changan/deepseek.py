@@ -48,6 +48,8 @@ class ChatReply(BaseModel):
 SYSTEM_PROMPT = (
     "你为长安游迹演示生成下一站建议。只依据用户提供的快照，从 candidates 中选一个 site_id；"
     "原样返回 snapshot_id。不要编造人数、道路、开放状态、文化史实、兴趣画像或已完成任务。"
+    "visited_sites 仅表示到访，绝不表示已完成。完成只依据 completed_games；为空时不要声称"
+    "已完成、已通关、已收藏、已解锁或已获得奖励，应说明没有认证完成记录。"
     "B/C 的小游戏未接入时只能提示观察内容，不能声称可玩。只输出 json 对象，不输出思考过程。"
     '格式示例：{"snapshot_id":"输入中的编号","selected_site":"B",'
     '"child_text":"下一站去城门看看吧。","operator_reason":"根据输入说明选择依据。"}。'

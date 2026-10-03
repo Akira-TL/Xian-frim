@@ -204,6 +204,10 @@ class RecommendationService:
         if (output.snapshot_id != result.snapshot_id or not any(
                 candidate.site.site_id == output.selected_site for candidate in result.input.candidates)):
             raise ValueError("模型快照或候选不匹配")
+        if not result.input.completed_games and any(
+                claim in text for text in (output.child_text, output.operator_reason)
+                for claim in ("已完成", "已通关", "已收藏", "已解锁", "已获得奖励")):
+            raise ValueError("没有认证完成记录，不能声明已完成或已取得奖励状态")
         return RecommendationResult(snapshot_id=result.snapshot_id, source="model", fallback_reason=None,
                                     selected_site=output.selected_site, child_text=output.child_text,
                                     operator_reason=output.operator_reason, input=result.input)
