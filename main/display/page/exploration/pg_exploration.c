@@ -67,6 +67,8 @@ static void primary(lv_obj_t *object)
     lv_obj_set_style_bg_color(object, lv_color_hex(0x973e2d), 0);
     lv_obj_set_style_border_color(object, lv_color_hex(0xc77953), 0);
     lv_obj_set_style_border_width(object, 1, 0);
+    lv_obj_set_style_text_color(object, lv_color_hex(0xfff7e7), 0);
+    lv_obj_set_style_bg_color(object, lv_color_hex(0x803325), LV_STATE_PRESSED);
 }
 
 static lv_obj_t *button(const char *text, int x, int y, int width,
@@ -75,9 +77,10 @@ static lv_obj_t *button(const char *text, int x, int y, int width,
     lv_obj_t *obj = lv_button_create(pg.root);
     lv_obj_set_size(obj, width, 54);
     lv_obj_set_pos(obj, x, y);
-    lv_obj_set_style_bg_color(obj, lv_color_hex(0x34332b), 0);
-    lv_obj_set_style_bg_color(obj, lv_color_hex(0x565044), LV_STATE_PRESSED);
-    lv_obj_set_style_border_color(obj, lv_color_hex(0x796247), 0);
+    lv_obj_set_style_bg_color(obj, lv_color_hex(0xf1e5cd), 0);
+    lv_obj_set_style_text_color(obj, lv_color_hex(0x263e30), 0);
+    lv_obj_set_style_bg_color(obj, lv_color_hex(0xe2d0aa), LV_STATE_PRESSED);
+    lv_obj_set_style_border_color(obj, lv_color_hex(0xb99861), 0);
     lv_obj_set_style_border_width(obj, text ? 1 : 0, 0);
     lv_obj_set_style_radius(obj, text ? 16 : 9, 0);
     lv_obj_set_style_shadow_width(obj, 0, 0);
@@ -167,7 +170,7 @@ static void setting_slider(int y, int minimum, int value, intptr_t kind)
     lv_obj_set_pos(slider, 90, y);
     lv_slider_set_range(slider, minimum, 100);
     lv_slider_set_value(slider, value, LV_ANIM_OFF);
-    lv_obj_set_style_bg_color(slider, lv_color_hex(0x3e392e), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(slider, lv_color_hex(0xe4d8c0), LV_PART_MAIN);
     lv_obj_set_style_bg_color(slider, lv_color_hex(0xc4a574), LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(slider, lv_color_hex(0xf5dfb6), LV_PART_KNOB);
     lv_obj_set_style_pad_all(slider, 5, LV_PART_KNOB);
@@ -334,7 +337,7 @@ static void render(void)
                 fragment(piece, i);
             }
         }
-        pg.instruction = label(pg.notice ? pg.notice : "按住碎片，拖入轮廓", 244);
+        pg.instruction = label(pg.notice ? pg.notice : "拖入轮廓", 244);
         button("退出", 78, 280, 98, navigate, VIEW_HOME);
         button("设置", 184, 280, 98, open_settings, 0);
     } else if (pg.view == VIEW_COLLECTION || pg.view == VIEW_EXHIBIT) {
@@ -364,19 +367,23 @@ static void render(void)
             button("首页", 110, 260, 140, navigate, VIEW_HOME);
         }
     } else {
-        lv_obj_t *status = label(pg.notice ? pg.notice : (pg.progress.unlocked ? "秦俑工坊 · 已解锁" : "到点出示背面二维码"), 88);
-        lv_obj_set_style_text_color(status, lv_color_hex(0xc4ae87), 0);
-        lv_obj_t *play = button(pg.progress.completed ? "再玩一次" : "开始游戏", 70, 135, 220, navigate, VIEW_GAME);
-        lv_obj_set_height(play, 64);
+        lv_obj_t *art = lv_obj_create(pg.root);
+        lv_obj_remove_style_all(art);
+        lv_obj_set_pos(art, 124, 74);
+        lv_obj_set_size(art, 112, 112);
+        lv_obj_clear_flag(art, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+        qin_art_add(art, QIN_ART_GUARDIAN, 112, 112);
+        lv_obj_t *status = label(pg.notice ? pg.notice : (pg.progress.unlocked ? "秦俑归阵" : "扫码解锁游戏"), 188);
+        lv_obj_set_style_text_color(status, lv_color_hex(0x6e654d), 0);
+        lv_obj_t *play = button(pg.progress.completed ? "再玩一次" : "开始游戏", 70, 220, 220, navigate, VIEW_GAME);
+        lv_obj_set_height(play, 50);
         primary(play);
         lv_obj_t *caption = lv_obj_get_child(play, 0);
         lv_obj_set_style_transform_scale_x(caption, 384, 0);
         lv_obj_set_style_transform_scale_y(caption, 384, 0);
         if (!pg.progress.unlocked) lv_obj_add_state(play, LV_STATE_DISABLED);
-        button("收藏", 78, 215, 98, navigate, VIEW_COLLECTION);
-        button("设置", 184, 215, 98, open_settings, 0);
-        if (pg.progress.exhibiting)
-            button("展示", 110, 283, 140, navigate, VIEW_EXHIBIT);
+        lv_obj_set_height(button("收藏", 82, 281, 94, navigate, VIEW_COLLECTION), 44);
+        lv_obj_set_height(button("设置", 184, 281, 94, open_settings, 0), 44);
     }
 }
 
@@ -406,9 +413,9 @@ static void load(page_base_t *self)
     pg.hint_until = 0;
     lv_obj_remove_style_all(pg.root);
     lv_obj_set_size(pg.root, 360, 360);
-    lv_obj_set_style_bg_color(pg.root, lv_color_hex(0x20251f), 0);
+    lv_obj_set_style_bg_color(pg.root, lv_color_hex(0xfaf3e3), 0);
     lv_obj_set_style_bg_opa(pg.root, LV_OPA_COVER, 0);
-    lv_obj_set_style_text_color(pg.root, lv_color_hex(0xffecd6), 0);
+    lv_obj_set_style_text_color(pg.root, lv_color_hex(0x263e30), 0);
     lv_obj_set_style_text_font(pg.root, &font_puhui_18_4, 0);
     lv_obj_clear_flag(pg.root, LV_OBJ_FLAG_SCROLLABLE);
     render();

@@ -5,7 +5,7 @@ build_dir="${1:-${project_root}/build}"
 asset_dir="${2:-${project_root}/assets/qin}"
 output_dir="${build_dir}/qin-assets"
 converter="${project_root}/managed_components/lvgl__lvgl/scripts/LVGLImage.py"
-names=(head body legs reward)
+names=(head body legs reward guardian)
 mkdir -p "${output_dir}"
 has_images=false
 for name in "${names[@]}"; do
@@ -36,7 +36,7 @@ done
             printf 'extern const lv_image_dsc_t qin_%s;\n' "${name}"
         fi
     done
-    printf 'static const lv_image_dsc_t *const qin_images[4] = {\n'
+    printf 'static const lv_image_dsc_t *const qin_images[5] = {\n'
     for name in "${names[@]}"; do
         if [[ -f "${asset_dir}/${name}.png" ]]; then printf '    &qin_%s,\n' "${name}"
         else printf '    NULL,\n'; fi

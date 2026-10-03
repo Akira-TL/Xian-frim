@@ -7,6 +7,7 @@ typedef enum {
     QIN_ART_BODY,
     QIN_ART_LEGS,
     QIN_ART_REWARD,
+    QIN_ART_GUARDIAN,
     QIN_ART_COUNT
 } qin_art_id_t;
 
