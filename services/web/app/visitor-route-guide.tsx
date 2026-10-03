@@ -66,7 +66,8 @@ export default function VisitorRouteGuide({disabled}: {disabled: boolean}) {
     if (locked.current || disabled) return;
     locked.current = true; setBusy(true); clear();
     try {
-      const value = await api.guide({start_site: start, visitor_profile: profile, data_source: source, crowd_scenario: scenario});
+      const value = await api.guide({start_site: start, visitor_profile: profile, data_source: source,
+        crowd_scenario: scenario, avoid_site: result?.selected_site ?? undefined});
       if (active.current) { setResult(value); setNow(Date.now()); saveHistory(addGuideHistory(history, value)); }
     } catch (error) {
       if (active.current) setNotice(error instanceof Error ? error.message : "暂时没有建议，请重试");
@@ -94,7 +95,7 @@ export default function VisitorRouteGuide({disabled}: {disabled: boolean}) {
       {(["A", "B", "C"] as const).map(site => <option key={site} value={site}>{places[site].name}</option>)}
     </select></label><span>{source === "generated_simulation" ? "演示热度" : "打卡热度"}</span></div>
     <button className="visitor-primary guide-request" disabled={busy || disabled} onClick={() => void request()}>
-      <AutoAwesomeRounded fontSize="small" />{busy ? "正在为你规划…" : result ? "重新推荐" : "为我推荐下一站"}
+      <AutoAwesomeRounded fontSize="small" />{busy ? "正在为你规划…" : result ? "换个推荐" : "为我推荐下一站"}
     </button>
     {place && candidate && result ? <article className="guide-destination" aria-live="polite">
       <div className="guide-picture"><Image key={place.image} src={place.image} width={720} height={480} alt={`${place.name}文化主题插画`} priority />
@@ -107,7 +108,7 @@ export default function VisitorRouteGuide({disabled}: {disabled: boolean}) {
           {expired ? <p className="guide-expired">历史建议 · 当时的热度已过期，可重新推荐</p> :
           <div className="guide-actions"><button className="visitor-primary" onClick={() => choose("accepted")}>就去这里</button>
             <button onClick={() => choose("rejected")}>暂不去</button></div>}
-          {decision && <p className="guide-decision">{decision === "accepted" ? "下一站就去这里，抵达后再打卡" : "换个兴趣或出发点，再看看推荐"}</p>}
+          {decision && <p className="guide-decision">{decision === "accepted" ? "下一站就去这里，抵达后再打卡" : "点击“换个推荐”，看看其他地点"}</p>}
       </div>
     </article> : <div className="guide-empty"><Image src="/xks/images/changan-gate-v3.webp" width={780} height={260} alt="长安文化探索插画" />
       <p>{busy ? "结合你的偏好与节点热度，寻找下一站" : result ? "暂时没有开放、可达且数据有效的下一站" : "告诉我们你的偏好，下一站不必随大流"}</p></div>}

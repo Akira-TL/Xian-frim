@@ -40,6 +40,7 @@ class GuideRequest(Contract):
     visitor_profile: VisitorProfile = Field(default_factory=VisitorProfile)
     data_source: Literal["physical_scan_simulated_site", "generated_simulation"] = "generated_simulation"
     crowd_scenario: Literal["balanced", "gate_busy", "courtyard_busy"] = "balanced"
+    avoid_site: SiteId | None = None
 
 
 class RecommendationCandidate(Contract):
@@ -62,6 +63,7 @@ class RecommendationInput(Contract):
     progress_verified_at: datetime | None
     candidates: list[RecommendationCandidate]
     visitor_profile: VisitorProfile | None = None
+    previous_recommended_site: SiteId | None = None
 
 
 class RecommendationResult(Contract):
@@ -156,12 +158,17 @@ class RecommendationService:
             for site in self.catalog.sites for observed in statistics.sites
             if observed.site_id == site.site_id and site.site_id in start.reachable_sites
             and site.is_open and observed.data_status == "fresh" and observed.updated_at is not None]
+        # “换个推荐”只排除上次建议，不把建议或想去记成到访。
+        alternatives = [item for item in candidates if item.site.site_id != request.avoid_site]
+        if alternatives:
+            candidates = alternatives
         snapshot = RecommendationInput(snapshot_id=uuid4().hex, data_source=source, generated_at=now,
             expires_at=min([now + timedelta(seconds=30)] + [item.statistics.updated_at + timedelta(seconds=90)
                 for item in candidates if item.statistics.updated_at is not None]),
             catalog_version=self.catalog.version, heat_thresholds=self.catalog.heat_thresholds,
             selected_visit_site=request.start_site, visited_sites=[], completed_games=[], progress_verified_at=None,
-            candidates=candidates, visitor_profile=request.visitor_profile)
+            candidates=candidates, visitor_profile=request.visitor_profile,
+            previous_recommended_site=request.avoid_site)
         # 指引请求只留推荐审计记录，不构造扫码或把自选起点当作到访。
         context = RecommendationRequest(badge_id="visitor-demo", event_id="guide-" + snapshot.snapshot_id)
         return await self._finish(context, self._rule(snapshot, "not_configured"), clock, guide=True)
@@ -342,6 +349,9 @@ class RecommendationService:
                 explanation += f"{selected.site.name}的输入热度为{heat_name}。"
             if not selected.site.game_available:
                 explanation += "该点小游戏尚未接入，只有地图与内容示意。"
+            if snapshot.previous_recommended_site is not None:
+                explanation += ("目前只有这个有效候选，暂时没有其他可推荐地点。" if
+                    selected.site.site_id == snapshot.previous_recommended_site else "已避开上一条建议，重新比较有效候选。")
             return RecommendationResult(snapshot_id=snapshot.snapshot_id, source="rule_fallback",
                                         fallback_reason=reason, selected_site=selected.site.site_id,
                                         child_text=f"下一站去{selected.site.name}看看吧。", operator_reason=explanation, input=snapshot)

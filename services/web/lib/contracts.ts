@@ -163,6 +163,7 @@ export const visitorProfileSchema = z.strictObject({
 export const guideRequestSchema = z.strictObject({start_site: siteId, visitor_profile: visitorProfileSchema,
   data_source: z.enum(["physical_scan_simulated_site", "generated_simulation"]),
   crowd_scenario: z.enum(["balanced", "gate_busy", "courtyard_busy"]),
+  avoid_site: siteId.nullable().optional(),
 });
 export type VisitorProfile = z.infer<typeof visitorProfileSchema>;
 export type GuideRequest = z.infer<typeof guideRequestSchema>;
@@ -177,6 +178,7 @@ const recommendationInputSchema = z.strictObject({
     site: siteDefinitionSchema, statistics: siteStatisticsSchema, visited: z.boolean(),
   })).max(2),
   visitor_profile: visitorProfileSchema.nullable().optional(),
+  previous_recommended_site: siteId.nullable().optional(),
 }).refine(value => new Set(value.visited_sites).size === value.visited_sites.length
   && new Set(value.candidates.map(candidate => candidate.site.site_id)).size === value.candidates.length
   && Date.parse(value.generated_at) < Date.parse(value.expires_at)

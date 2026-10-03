@@ -1,6 +1,7 @@
 from pathlib import Path
 from fastapi.testclient import TestClient
 from changan.api import create_app
+from changan.catalog import default_catalog
 from changan.recommendations import GuideRequest, RecommendationInput, RecommendationResult
 from test_visits import NOW, operator
 
@@ -28,6 +29,35 @@ def test_preferences_and_crowd_both_change_demo_recommendation_without_visits(tm
         assert recommend().source == "none"  # 无现场观测不能复用演示热度。
 
 
+def test_change_recommendation_avoids_previous_without_inventing_visit(tmp_path: Path) -> None:
+    with TestClient(create_app(tmp_path / "change.sqlite3", "operator-test", "terminal-test", lambda: NOW)) as client:
+        request = GuideRequest()
+        selected: list[str | None] = []
+        for _ in range(4):
+            response = client.post("/api/v1/guide-recommendations", content=request.model_dump_json(), headers=operator())
+            assert response.status_code == 200
+            result = RecommendationResult.model_validate_json(response.text)
+            selected.append(result.selected_site)
+            assert result.input.visited_sites == []
+            assert result.input.previous_recommended_site == request.avoid_site
+            request.avoid_site = result.selected_site
+        assert selected == ["B", "C", "B", "C"]
+        assert client.get("/api/v1/visits", headers=operator()).json() == []
+
+
+def test_only_viable_candidate_may_repeat_with_explicit_reason(tmp_path: Path) -> None:
+    catalog = default_catalog()
+    next(site for site in catalog.sites if site.site_id == "C").is_open = False
+    with TestClient(create_app(tmp_path / "single.sqlite3", "operator-test", "terminal-test", lambda: NOW,
+                              site_catalog=catalog)) as client:
+        request = GuideRequest(avoid_site="B")
+        response = client.post("/api/v1/guide-recommendations", content=request.model_dump_json(), headers=operator())
+        assert response.status_code == 200
+        result = RecommendationResult.model_validate_json(response.text)
+        assert result.selected_site == "B"
+        assert "只有这个有效候选" in result.operator_reason
+
+
 class ProfileModel:
     snapshot: RecommendationInput | None = None
     async def recommend(self, snapshot: RecommendationInput) -> str:
@@ -39,6 +69,24 @@ class ProfileModel:
         return '{"snapshot_id":"' + snapshot.snapshot_id + '","selected_site":"C",' \
             '"child_text":"下一站去诗意庭院赏诗，按你的节奏慢慢欣赏。",' \
             '"operator_reason":"游客自选慢节奏，演示输入中庭院热度较低。"}'
+
+
+class RepeatingModel:
+    async def recommend(self, snapshot: RecommendationInput) -> str:
+        assert snapshot.previous_recommended_site == "B"
+        assert [item.site.site_id for item in snapshot.candidates] == ["C"]
+        return '{"snapshot_id":"' + snapshot.snapshot_id + '","selected_site":"B",' \
+            '"child_text":"下一站去城门。","operator_reason":"重复上一条建议。"}'
+
+
+def test_model_cannot_restore_excluded_previous_recommendation(tmp_path: Path) -> None:
+    with TestClient(create_app(tmp_path / "repeat-model.sqlite3", "operator-test", "terminal-test", lambda: NOW,
+                              recommendation_model=RepeatingModel())) as client:
+        response = client.post("/api/v1/guide-recommendations", content=GuideRequest(avoid_site="B").model_dump_json(),
+                               headers=operator())
+        assert response.status_code == 200
+        result = RecommendationResult.model_validate_json(response.text)
+        assert result.selected_site == "C" and result.fallback_reason == "invalid_output"
 
 
 def test_model_receives_self_reported_preferences_and_crowd_not_inferred_identity(tmp_path: Path) -> None:
