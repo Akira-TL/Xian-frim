@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 extern page_vtable_t *exploration_create(const char *name);
 static qin_progress_t progress = {.unlocked = true};
@@ -58,6 +59,27 @@ static void click(lv_obj_t *root, const char *text)
 static void flush(lv_display_t *display, const lv_area_t *area, uint8_t *pixels)
 { (void)area; (void)pixels; lv_display_flush_ready(display); }
 
+// 可选导出正式页面的实际绘制缓冲；不是实物屏幕摄影。
+static void capture(lv_display_t *display, const char *name)
+{
+    const char *directory = getenv("QIN_PREVIEW_DIR");
+    if (!directory) return;
+    lv_refr_now(display);
+    char path[1024];
+    assert(snprintf(path, sizeof(path), "%s/%s.ppm", directory, name) < (int)sizeof(path));
+    FILE *file = fopen(path, "wb");
+    assert(file);
+    fprintf(file, "P6\n360 360\n255\n");
+    for (unsigned i = 0; i < 360 * 360; ++i) {
+        uint16_t pixel;
+        memcpy(&pixel, framebuffer + i * 2, 2);
+        unsigned char rgb[] = {(pixel >> 11) * 255 / 31,
+            ((pixel >> 5) & 63) * 255 / 63, (pixel & 31) * 255 / 31};
+        assert(fwrite(rgb, 1, 3, file) == 3);
+    }
+    assert(fclose(file) == 0);
+}
+
 int main(void)
 {
     lv_init();
@@ -68,7 +90,9 @@ int main(void)
     page_base_t page = {.root = lv_obj_create(lv_screen_active())};
     page_vtable_t *table = exploration_create("exploration");
     table->on_view_load(&page);
+    capture(display, "home");
     click(page.root, "开始秦俑归阵");
+    capture(display, "game");
     assert(begin_calls == 1);
     qin_result_t result;
     exploration_select(0, &result);
@@ -76,6 +100,7 @@ int main(void)
     assert(puzzle.placed_mask == 1);
     qin_puzzle_t before = puzzle;
     click(page.root, "设置");
+    capture(display, "settings");
     lv_obj_t *sliders[2] = {NULL, NULL};
     unsigned count = 0;
     for (uint32_t i = 0; i < lv_obj_get_child_count(page.root); ++i) {
