@@ -74,7 +74,8 @@ export default function VisitorRouteGuide({disabled}: {disabled: boolean}) {
     } finally { locked.current = false; if (active.current) setBusy(false); }
   }
   return <section className="visitor-route-guide" aria-label="智能路线指引">
-    <div className="guide-heading"><div><span>你的长安，怎么逛？</span><h1>下一站指引</h1></div><RouteRounded /></div>
+    <div className="guide-heading"><div><span>按你的兴趣，走进长安</span><h1>下一站，去哪儿？</h1></div></div>
+    <Image className="display-route-panorama" src="/xks/images/display-v1/route-panorama.webp" width={1200} height={700} alt="秦俑工坊、长安城门与诗意庭院的文化探索路线插画" priority />
     <div className="guide-preferences">
       <label>同行<select aria-label="同行情况" value={profile.party} disabled={busy}
         onChange={event => preference("party", event.target.value as VisitorProfile["party"])}>
@@ -110,12 +111,12 @@ export default function VisitorRouteGuide({disabled}: {disabled: boolean}) {
             <button onClick={() => choose("rejected")}>暂不去</button></div>}
           {decision && <p className="guide-decision">{decision === "accepted" ? "下一站就去这里，抵达后再打卡" : "点击“换个推荐”，看看其他地点"}</p>}
       </div>
-    </article> : <div className="guide-empty"><Image src="/xks/images/changan-gate-v3.webp" width={780} height={260} alt="长安文化探索插画" />
-      <p>{busy ? "结合你的偏好与节点热度，寻找下一站" : result ? "暂时没有开放、可达且数据有效的下一站" : "告诉我们你的偏好，下一站不必随大流"}</p></div>}
+    </article> : <div className="guide-empty"><Image src="/xks/images/display-v1/gate-card.webp" width={480} height={640} alt="长安城门文化主题插画" />
+      <div><span>文化主题预览</span><h2>长安城门</h2><p>{busy ? "结合你的偏好与节点热度，寻找下一站" : result ? "暂时没有开放、可达且数据有效的下一站" : "漫步朱门楼阁，发现长安的故事。推荐后，查看适合你的下一站。"}</p></div></div>}
     {notice && <p className="visitor-notice" role="status">{notice}</p>}
     <section className="guide-history" aria-label="路线推荐记录">
       <div className="guide-history-heading"><h2>路线记录</h2><span>最近 {history.length} 次建议</span></div>
-      {history.length === 0 ? <p className="guide-history-empty">推荐会留在这里，随时回看。</p> :
+      {history.length === 0 ? <div className="guide-history-empty"><RouteRounded /><p>你的下一段旅程，从这里开始<span>推荐会留在这里，随时回看。</span></p></div> :
         <ol>{history.map(({result: record, decision: choice}) => {
           const destination = record.selected_site ? places[record.selected_site] : undefined;
           const heat = record.input.candidates.find(item => item.site.site_id === record.selected_site)?.statistics.heat;

@@ -17,6 +17,10 @@ import ImageRounded from "@mui/icons-material/ImageRounded";
 import CheckCircleRounded from "@mui/icons-material/CheckCircleRounded";
 import BluetoothRounded from "@mui/icons-material/BluetoothRounded";
 import SyncRounded from "@mui/icons-material/SyncRounded";
+import ArrowForwardRounded from "@mui/icons-material/ArrowForwardRounded";
+import ChevronRightRounded from "@mui/icons-material/ChevronRightRounded";
+import BookmarkBorderRounded from "@mui/icons-material/BookmarkBorderRounded";
+import LockOutlined from "@mui/icons-material/LockOutlined";
 
 type Tab = "explore" | "collection" | "route" | "activity";
 const screenNames = {cover: "入口封面", selection: "选择游戏", intro: "准备开始", playing: "正在游玩",
@@ -31,6 +35,8 @@ export default function OperatorPanel() {
   const [visits, setVisits] = useState<Visit[]>([]);
   const [badgeId, setBadgeId] = useState("");
   const [tab, setTab] = useState<Tab>("explore");
+  const [connectionOpen, setConnectionOpen] = useState(false);
+  const [featured, setFeatured] = useState<keyof typeof games>("qin_formation");
   const [online, setOnline] = useState(false);
   const [busy, setBusy] = useState(false);
   const [connected, setConnected] = useState(false);
@@ -136,6 +142,11 @@ export default function OperatorPanel() {
     {id: "poem_completion" as const, collected: runtime?.v === 2 && (runtime.bonus_collected & 2) !== 0, index: 2},
   ];
   const rewardCount = rewards.filter(item => item.collected).length;
+  const featuredReward = rewards.find(item => item.id === featured)!;
+  const rewardImage = (id: keyof typeof games) => `/xks/images/display-v1/${id === "qin_formation" ? "qin" : id === "gate_search" ? "gate" : "poem"}-card.webp`;
+  const rewardStatus = (item: typeof rewards[number]) => !connected ? "连接后查看" : !item.collected ? "通关后获得" :
+    (runtime?.v === 2 ? runtime.exhibit_game === item.index : item.index === 0 && progress?.exhibiting) ? "腰牌展示中" : "已收藏";
+  function openConnection() { setTab("explore"); setConnectionOpen(true); }
   const shownReward = runtime?.v === 2 && runtime.exhibit_game < 3 ? rewards[runtime.exhibit_game] : undefined;
   const localGame = runtime?.v === 2 && runtime.game_id !== "qin_formation" ?
     rewards[runtime.game_id === "gate_search" ? 1 : 2] : undefined;
@@ -145,12 +156,21 @@ export default function OperatorPanel() {
     {name: "展示", done: runtime?.v === 2 && runtime.exhibit_game === localGame.index, Icon: ImageRounded},
   ] : [{ name: "解锁", done: progress?.unlocked, Icon: LockOpenRounded }, { name: "通关", done: progress?.completed, Icon: SportsEsportsRounded },
     { name: "收藏", done: progress?.collected, Icon: CollectionsBookmarkRounded }, { name: "展示", done: runtime?.v === 2 ? runtime.exhibit_game === 0 : progress?.exhibiting, Icon: ImageRounded }];
-  return <main className={`visitor-app${runtime?.screen ? " has-runtime" : ""}${tab === "route" ? " is-route" : ""}`}>
-    {(tab === "explore" || tab === "collection") && <><header className="visitor-header"><h1>长安游迹</h1>
-      <Image src="/xks/images/changan-gate-v3.webp" width={780} height={260} alt="云山间的长安城门" priority className="visitor-landscape" />
+  return <main className={`visitor-app display-app is-${tab}${runtime?.screen ? " has-runtime" : ""}`}>
+    {tab === "explore" && <><header className="display-explore-hero">
+      <Image src="/xks/images/display-v1/explore-hero.webp" width={1080} height={1200} alt="云山与长安城门文化主题插画" priority className="display-hero-art" />
+      <div className="display-brand"><strong>长安游迹</strong><span>CHANG’AN JOURNEY</span></div>
+      <button className="display-bookmark" aria-label="打开我的收藏" onClick={() => setTab("collection")}><BookmarkBorderRounded /></button>
+      <div className="display-hero-copy"><p>一枚腰牌，一城故事</p><h1>把长安<br />带在身边</h1></div>
+      <button className="display-start" onClick={() => setTab("route")}>开始探索<ArrowForwardRounded /></button>
     </header>
-    <section className="visitor-badge" aria-label="我的腰牌">
-      <div className="visitor-card-heading"><h2>我的腰牌</h2><span className={connected ? "visitor-connected" : "visitor-muted"}>{connected ? "已连接" : "未连接"}</span></div>
+    <section className={`visitor-badge display-connection${connectionOpen ? " is-open" : ""}`} aria-label="我的腰牌">
+      <div className="display-connection-strip"><BluetoothRounded className="display-bluetooth" />
+        <div><h2>我的腰牌</h2><p>{connected ? `${badge?.display_number ?? ""}号 · 已连接` : "连接后同步收藏"}</p></div>
+        <button className="visitor-primary" aria-expanded={connectionOpen} aria-controls="badge-connection-details"
+          onClick={() => setConnectionOpen(value => !value)}>{connected ? "查看进度" : "连接腰牌"}</button>
+      </div>
+      <div id="badge-connection-details" hidden={!connectionOpen}>
       <div className="visitor-connection-row"><select aria-label="选择腰牌编号" value={badgeId} disabled={busy || !online}
         onChange={event => { if (!locked.current) { disconnect(); setBadgeId(event.target.value); setNotice(""); } }}>
         <option value="">选择编号</option>
@@ -175,28 +195,37 @@ export default function OperatorPanel() {
           onClick={() => void operate(prepareTestVisit)}>创建A点测试打卡</button>
       </details>}
       {(notice || unsupported || !online) && <p className="visitor-notice" role="status">{unsupported || notice || "网络暂不可用"}</p>}
+      </div>
     </section></>}
-    {tab === "explore" && <div className="visitor-feature-grid">
-      <button className="visitor-feature visitor-collection" onClick={() => setTab("collection")}><h2>我的收藏</h2>
-        <Image src={shownReward ? games[shownReward.id].image : games.qin_formation.image} width={240} height={240} alt="游戏收藏" />
-        <span>{rewardCount ? `已收藏 ${rewardCount} / 3` : progress ? "通关后获得" : "连接后查看"}</span></button>
-      <button className="visitor-feature visitor-next" onClick={() => setTab("route")}><h2>下一站</h2>
-        <Image src="/xks/images/changan-gate-v3.webp" width={780} height={260} alt="长安文化探索" />
-        <h3>按你的兴趣与节点热度</h3><span className="visitor-primary">查看路线指引</span>
+    {tab === "explore" && <section className="display-discover"><h2>带走一份长安</h2><p>在游戏里，遇见千年故事</p><div className="visitor-feature-grid">
+      <button className="visitor-feature visitor-collection" onClick={() => setTab("collection")}>
+        <Image src={rewardImage(shownReward?.id ?? "qin_formation")} width={480} height={640} alt="秦俑珍藏主题插画" />
+        <div><h2>我的收藏</h2><span>{rewardCount ? `已收藏 ${rewardCount} / 3` : "通关收集"}</span><ArrowForwardRounded /></div></button>
+      <button className="visitor-feature visitor-next" onClick={() => setTab("route")}>
+        <Image src="/xks/images/display-v1/gate-card.webp" width={480} height={640} alt="长安城门主题插画" />
+        <div><h2>下一站</h2><span>跟随你的兴趣出发</span><ArrowForwardRounded /></div>
       </button>
-    </div>}
+    </div></section>}
     {tab === "explore" && <button type="button" className="visitor-activity-entry" onClick={() => setTab("activity")}>
-      <BarChartRounded fontSize="small" />活动概览<span>查看三节点热度</span>
+      <BarChartRounded fontSize="small" />活动概览<ChevronRightRounded />
     </button>}
     {tab === "activity" && <ActivityOverview />}
-    {tab === "collection" && <section className="visitor-subpage"><h2>我的收藏</h2>
-      {!connected && <p>连接腰牌，查看你的收藏</p>}
-      <div className="visitor-rewards">{rewards.map(item => <article key={item.id} className={item.collected ? "is-collected" : ""}>
-        <Image src={games[item.id].image} width={96} height={96} alt={games[item.id].reward} />
-        <div><h3>{games[item.id].reward}</h3><p>{item.collected ?
-          (runtime?.v === 2 ? runtime.exhibit_game === item.index : item.index === 0 && progress?.exhibiting)
-            ? "腰牌展示中" : item.index ? "本地收藏" : "已收藏" : connected ? "通关后获得" : "连接后查看"}</p></div>
-      </article>)}</div>
+    {tab === "collection" && <section className="display-collection-page" aria-label="我的收藏">
+      <header className="display-collection-heading"><Image src="/xks/images/display-v1/collection-heading.webp" width={960} height={360} alt="" priority />
+        <span>长安游迹</span><h1>我的长安藏册</h1><p>把旅途里的故事，珍藏起来</p></header>
+      <article className="display-collection-hero">
+        <Image key={featured} src={featured === "qin_formation" ? "/xks/images/display-v1/collection-hero.webp" : rewardImage(featured)}
+          width={1080} height={784} alt={`${games[featured].reward}文化主题珍藏插画`} priority />
+        <div><h2>{games[featured].reward}</h2><p>{featuredReward.collected ? <CheckCircleRounded /> : <LockOutlined />}{rewardStatus(featuredReward)}</p></div>
+      </article>
+      <div className="display-collection-section-heading"><h2>三段旅程 · 三份珍藏</h2></div>
+      <div className="visitor-rewards">{rewards.map(item => <button key={item.id} onClick={() => setFeatured(item.id)}
+        aria-pressed={featured === item.id} aria-label={`查看${games[item.id].reward}`} className={item.collected ? "is-collected" : ""}>
+        <Image src={rewardImage(item.id)} width={480} height={640} alt={games[item.id].reward} />
+        <div><h3>{games[item.id].reward}</h3><p>{item.collected ? <CheckCircleRounded /> : <LockOutlined />}{rewardStatus(item)}</p></div>
+      </button>)}</div>
+      <div className="display-collection-connect"><BluetoothRounded /><div><strong>{connected ? "旅途的故事，正在珍藏" : "连接腰牌，点亮你的藏册"}</strong><p>{connected ? `已收藏 ${rewardCount} / 3` : "让每一段旅程，都有可珍藏的印记"}</p></div>
+        <button className="display-start" onClick={openConnection}>{connected ? "查看进度" : "连接腰牌"}<ChevronRightRounded /></button></div>
     </section>}
     {tab === "route" && <VisitorRouteGuide disabled={!online} />}
     <nav className="visitor-nav" aria-label="页面导航">{([{value: "explore", name: "探索", Icon: ExploreRounded}, {value: "collection", name: "收藏", Icon: CollectionsBookmarkRounded}, {value: "route", name: "路线", Icon: RouteRounded}] as const)

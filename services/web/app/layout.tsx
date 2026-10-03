@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./styles/visitor-display.css";
 
 export const metadata: Metadata = {
   title: "长安游迹",
