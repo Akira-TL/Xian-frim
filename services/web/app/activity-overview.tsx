@@ -40,7 +40,7 @@ export default function ActivityOverview() {
   const current = snapshot?.map.source === source ? snapshot : undefined;
   return <section className="mb-6 rounded-2xl border border-stone-200 bg-white p-5" aria-label="手机活动概览">
     <h2 className="text-xl font-semibold">活动概览</h2>
-    <p className="mt-2 text-sm text-stone-600">三节点参与腰牌打卡数据，不是实时在场人数。概览来源选择不改变下方到访或设备控制目标。</p>
+    <p className="mt-2 text-sm text-stone-600">参与腰牌打卡数据，不是实时在场人数。</p>
     <div className="my-3 flex flex-wrap items-center gap-3">
       <label className="text-sm">概览数据来源 <select aria-label="概览数据来源" value={source} className="ml-2 max-w-full rounded-lg border p-2"
         onChange={event => setSource(sourceSchema.parse(event.target.value))}>
@@ -68,7 +68,7 @@ export default function ActivityOverview() {
       <p className="mt-1 text-xs text-stone-600">演示阈值：低 0—{current.map.heat_thresholds.medium_min - 1}、中 {current.map.heat_thresholds.medium_min}—{current.map.heat_thresholds.high_min - 1}、高 {current.map.heat_thresholds.high_min} 及以上。过期或时间不可靠显示数据不足，不代表场地安全容量。</p>
       <p className="mt-1 text-xs text-stone-600">快照时间：{new Date(current.map.generated_at).toLocaleString("zh-CN", { hour12: false })}。不是设备在线或执行确认。</p>
     </div>}
-    <p className="mt-3 text-sm text-stone-600">下一站建议在下方“单次到访”中选择记录后生成，可查看依据和拒绝，不自动解锁。</p>
+    <p className="mt-3 text-sm text-stone-600">下一站建议请打开底部“路线”，活动概览不改变腰牌连接或游玩进度。</p>
     <Link href="/dashboard" className="mt-2 inline-block text-sm underline">查看完整地图、趋势与情景推演</Link>
   </section>;
 }

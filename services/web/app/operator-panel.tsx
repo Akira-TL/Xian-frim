@@ -6,6 +6,8 @@ import type { Badge, BadgeRuntime, DeviceState, Visit } from "../lib/contracts";
 import { BadgeControl } from "../lib/badge-control";
 import { bluetoothSupport, connectBadge } from "../lib/web-bluetooth";
 import VisitorRouteGuide from "./visitor-route-guide";
+import ActivityOverview from "./activity-overview";
+import BarChartRounded from "@mui/icons-material/BarChartRounded";
 import ExploreRounded from "@mui/icons-material/ExploreRounded";
 import CollectionsBookmarkRounded from "@mui/icons-material/CollectionsBookmarkRounded";
 import RouteRounded from "@mui/icons-material/RouteRounded";
@@ -16,7 +18,7 @@ import CheckCircleRounded from "@mui/icons-material/CheckCircleRounded";
 import BluetoothRounded from "@mui/icons-material/BluetoothRounded";
 import SyncRounded from "@mui/icons-material/SyncRounded";
 
-type Tab = "explore" | "collection" | "route";
+type Tab = "explore" | "collection" | "route" | "activity";
 const screenNames = {cover: "入口封面", selection: "选择游戏", intro: "准备开始", playing: "正在游玩",
   result: "通关成功", collection: "查看收藏", exhibit: "展示收藏", settings: "调整设置"};
 const games = {
@@ -136,7 +138,7 @@ export default function OperatorPanel() {
   ] : [{ name: "解锁", done: progress?.unlocked, Icon: LockOpenRounded }, { name: "通关", done: progress?.completed, Icon: SportsEsportsRounded },
     { name: "收藏", done: progress?.collected, Icon: CollectionsBookmarkRounded }, { name: "展示", done: runtime?.v === 2 ? runtime.exhibit_game === 0 : progress?.exhibiting, Icon: ImageRounded }];
   return <main className={`visitor-app${runtime?.screen ? " has-runtime" : ""}${tab === "route" ? " is-route" : ""}`}>
-    {tab !== "route" && <><header className="visitor-header"><h1>长安游迹</h1>
+    {(tab === "explore" || tab === "collection") && <><header className="visitor-header"><h1>长安游迹</h1>
       <Image src="/xks/images/changan-gate-v3.webp" width={780} height={260} alt="云山间的长安城门" priority className="visitor-landscape" />
     </header>
     <section className="visitor-badge" aria-label="我的腰牌">
@@ -170,6 +172,10 @@ export default function OperatorPanel() {
         <h3>按你的兴趣与节点热度</h3><span className="visitor-primary">查看路线指引</span>
       </button>
     </div>}
+    {tab === "explore" && <button type="button" className="visitor-activity-entry" onClick={() => setTab("activity")}>
+      <BarChartRounded fontSize="small" />活动概览<span>查看三节点热度</span>
+    </button>}
+    {tab === "activity" && <ActivityOverview />}
     {tab === "collection" && <section className="visitor-subpage"><h2>我的收藏</h2>
       {!connected && <p>连接腰牌，查看你的收藏</p>}
       <div className="visitor-rewards">{rewards.map(item => <article key={item.id} className={item.collected ? "is-collected" : ""}>
