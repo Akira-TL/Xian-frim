@@ -11,6 +11,28 @@ test("无登记、无后台、无认证接口也能读取任意设备进度",asy
  await assert.rejects(readDemoSnapshot({}),/读取接口/);
  await assert.rejects(readDemoSnapshot({snapshot:async()=>undefined}),/更新固件/);
 });
+test("图片接口发现停滞时超时断开，不让传图界面一直等待",async context=>{
+ const oldWindow=Object.getOwnPropertyDescriptor(globalThis,"window");
+ const oldNavigator=Object.getOwnPropertyDescriptor(globalThis,"navigator");
+ let closed=false,lost=0;
+ const device={gatt:{connected:true,connect:async()=>{},disconnect:()=>{closed=true;},
+  getPrimaryService:async()=>({getCharacteristic:async(uuid:string)=>{
+   if(uuid.includes("5e994007"))return new Promise<never>(()=>{});
+   return {readValue:async()=>new DataView(new TextEncoder().encode(JSON.stringify(snapshot)).buffer)};
+  }})},addEventListener:()=>{},removeEventListener:()=>{}};
+ Object.defineProperty(globalThis,"window",{value:{isSecureContext:true},configurable:true});
+ Object.defineProperty(globalThis,"navigator",{value:{bluetooth:{requestDevice:async()=>device}},configurable:true});
+ try{
+  const link=await connectBadge(()=>{++lost;},{snapshotOnly:true});
+  context.mock.timers.enable({apis:["setTimeout"]});
+  const pending=assert.rejects(link.cover!(),/接口连接超时/);
+  context.mock.timers.tick(10_001);await pending;
+  assert.equal(closed,true);assert.equal(lost,1);
+ }finally{
+  if(oldWindow)Object.defineProperty(globalThis,"window",oldWindow);else Reflect.deleteProperty(globalThis,"window");
+  if(oldNavigator)Object.defineProperty(globalThis,"navigator",oldNavigator);else Reflect.deleteProperty(globalThis,"navigator");
+ }
+});
 test("直接同步只读取快照特征，不获取身份、随机数和授权特征",async()=>{
  const calls:string[]=[];
  const bytes=new TextEncoder().encode(JSON.stringify(snapshot));

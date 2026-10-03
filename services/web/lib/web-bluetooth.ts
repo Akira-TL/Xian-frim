@@ -41,8 +41,20 @@ export async function connectBadge(onDisconnect: () => void, options: {snapshotO
       const cover = async () => {
         live();
         if (!coverCharacteristic) {
-          try { coverCharacteristic = await service.getCharacteristic(characteristic("7")); }
-          catch { throw new Error("当前吧唧固件还不支持传图，请烧录新版固件后重试"); }
+          let lookupTimer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            coverCharacteristic = await Promise.race([
+              service.getCharacteristic(characteristic("7")),
+              new Promise<never>((_, reject) => {
+                lookupTimer = setTimeout(() => {
+                  disconnect(); onDisconnect(); reject(new Error("图片接口连接超时，请重新连接腰牌"));
+                }, 10_000);
+              }),
+            ]);
+          } catch (error) {
+            if (closed) throw error;
+            throw new Error("当前吧唧固件还不支持传图，请烧录新版固件后重试");
+          } finally { if (lookupTimer) clearTimeout(lookupTimer); }
         }
         live();
         const image = coverCharacteristic;
