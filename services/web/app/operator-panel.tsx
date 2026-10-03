@@ -7,6 +7,7 @@ import { BadgeControl, type ControlPhase } from "../lib/badge-control";
 import { bluetoothSupport, connectBadge } from "../lib/web-bluetooth";
 import RecommendationPanel from "./recommendation-panel";
 import ActivityOverview from "./activity-overview";
+import Link from "next/link";
 
 const siteNames = { A: "秦俑工坊", B: "长安城门", C: "诗意庭院" };
 const commandNames = { pending: "待发送", sent: "已发送，执行未确认", confirmed: "设备已确认执行", unknown: "结果未确认", failed: "请求失败" };
@@ -106,59 +107,65 @@ export default function OperatorPanel() {
     return () => { active = false; generation.current += 1; control.current?.close(); control.current = undefined; };
   }, [refresh]);
 
-  return <main className="mx-auto max-w-5xl px-4 py-8 sm:px-8">
-    <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
-      <div><p className="text-sm tracking-widest text-stone-600">实物腰牌 · 文化探索</p>
-        <h1 className="mt-2 text-3xl font-semibold">长安游迹</h1><p className="mt-2 text-stone-600">工作人员演示 · 无需登录</p></div>
-      <button className={buttonStyle} disabled={busy} onClick={() => void operate(async () => { await refresh(); setNotice("记录已刷新"); })}>刷新记录</button>
+  return <main className="journey-shell mx-auto max-w-5xl px-4 py-5 sm:px-8 sm:py-8">
+    <header className="journey-hero mb-5 flex flex-wrap items-center justify-between gap-4">
+      <div><p className="journey-eyebrow">一枚腰牌 · 一程长安</p>
+        <h1 className="mt-2 text-4xl font-semibold">长安游迹</h1><p className="mt-2 text-sm text-stone-600">连接腰牌，开启你的文化探索 · 免登录演示</p></div>
+      <Link className="journey-link" href="/dashboard">查看活动看板 <span aria-hidden="true">↗</span></Link>
     </header>
-    <section className="mb-6 rounded-2xl border border-stone-200 bg-white p-5" aria-label="链路状态">
-      <p>后台：{online ? "最近查询成功" : "未连接／记录可能过时"}</p>
-      <p className="mt-2 break-words">设备：{connection ? `已连接并匹配 ${connection.deviceId}` : "未连接／尚未匹配"}</p>
-      <p className="mt-2">执行：{phase ? phaseNames[phase] : "未核验"}</p>
-      <p className="mt-3 text-sm leading-6 text-stone-600" role="status">{notice}</p>
-      {unsupported && <p className="mt-3 text-sm text-amber-800">{unsupported}</p>}
-    </section>
-    <ActivityOverview />
-    <section className="mb-6 rounded-2xl bg-white p-5" aria-label="腰牌连接与进度">
-      <h2 className="text-xl font-semibold">腰牌连接与进度</h2>
-      <p className="my-3 text-sm text-stone-600">无需到访即可核对已登记腰牌、读取认证进度；连接和查询不会解锁游戏。</p>
-      <p className="mb-3 text-sm text-amber-800">演示联调可创建 A 点测试记录，不代表真实扫码，也不计真实到访统计。</p>
+    <section className="journey-connect mb-5 rounded-2xl bg-white p-5 sm:p-6" aria-label="腰牌连接与进度">
+      <div className="flex items-center justify-between gap-3"><h2 className="text-xl font-semibold">我的腰牌</h2>
+        <span className={`journey-status ${connection ? "is-connected" : ""}`}>{connection ? "身份已核对" : "待连接"}</span></div>
+      <p className="my-3 text-sm text-stone-600">选择编号并连接，查看游戏与收藏进度。</p>
       <label className="block text-sm">选择已登记腰牌
         <select aria-label="选择已登记腰牌" className="my-3 w-full rounded-lg border p-3"
           value={selectedBadge?.badge_id ?? ""} disabled={busy || !online}
           onChange={event => { if (!locked.current) { disconnect(); setSelection(undefined); setBadgeSelection(event.target.value); } }}>
           <option value="">请选择腰牌</option>
-          {badges.map(badge => <option key={badge.badge_id} value={badge.badge_id}>{badge.display_number} 号 · {badge.device_id}</option>)}
+          {badges.map(badge => <option key={badge.badge_id} value={badge.badge_id}>{badge.display_number} 号腰牌</option>)}
         </select>
       </label>
-      <div className="flex flex-wrap gap-3">
-        <button className={buttonStyle} disabled={busy || !online || !selectedBadge}
+      <div className="journey-actions grid grid-cols-2 gap-3">
+        <button className={`${buttonStyle} journey-primary col-span-2`} disabled={busy || !!unsupported || !selectedBadge || !online}
+          onClick={() => void operate(connect)}>{busy && !connection ? "正在处理…" : "连接并核对身份"}</button>
+        <button className="journey-secondary" disabled={busy || !connection}
+          onClick={() => void operate(() => deviceOperation(false))}>同步进度</button>
+        <button className="journey-secondary" disabled={busy || !connection}
+          onClick={() => { disconnect(); setNotice("已主动断开；下次连接会先查询设备状态"); }}>断开设备</button>
+      </div>
+      <p className="mt-3 text-sm leading-6 text-stone-600" role="status">{notice}</p>
+      {unsupported && <p className="mt-3 text-sm text-amber-800">{unsupported}</p>}
+      <details className="journey-details mt-4"><summary>连接详情与演示调试</summary>
+        <div className="space-y-2 pt-3 text-sm leading-6">
+          <p>后台：{online ? "最近查询成功" : "未连接／记录可能过时"}</p>
+          <p className="break-all">设备：{connection ? connection.deviceId : "尚未匹配"}</p>
+          <p>执行：{phase ? phaseNames[phase] : "未核验"}</p>
+          <p>连接与查询不会自动解锁。测试打卡不代表真实扫码，不计真实到访。</p>
+          <div className="flex flex-wrap gap-3"><button className="journey-secondary" disabled={busy || !online || !selectedBadge}
           onClick={() => void operate(async () => {
             if (!selectedBadge) throw new Error("请先选择腰牌");
             const result = await api.testVisit(selectedBadge.badge_id);
             await refresh(); setSelection(result.visit.event_id);
             setNotice("已创建 A 点接口测试记录，不计真实到访；连接核对身份后可解锁游戏");
           })}>测试打卡（A 点）</button>
-        <button className={buttonStyle} disabled={busy || !!unsupported || !selectedBadge || !online}
-          onClick={() => void operate(connect)}>连接并核对身份</button>
-        <button className={buttonStyle} disabled={busy || !connection}
-          onClick={() => void operate(() => deviceOperation(false))}>认证同步进度</button>
-        <button className="rounded-xl border border-stone-300 px-4 py-3" disabled={busy || !connection}
-          onClick={() => { disconnect(); setNotice("已主动断开；下次连接会先查询设备状态"); }}>断开设备</button>
-      </div>
-      {progress && <div className="mt-4 rounded-xl bg-stone-100 p-4 text-sm leading-7">
-        <p>认证进度：{progress.unlocked ? "已解锁" : "未解锁"} · {progress.completed ? "已通关" : "未通关"}</p>
-        <p>收藏：{progress.collected ? "已获得秦俑收藏" : "尚未获得"} · 展示：{progress.exhibiting ? "已设置" : "未设置"}</p>
-        <p>最近认证时间：{time(progress.verified_at)}</p>
-        <p>孩子离开手机通信范围后，已解锁游戏仍可在腰牌本地游玩。</p>
+          <button className="journey-secondary" disabled={busy} onClick={() => void operate(async () => { await refresh(); setNotice("记录已刷新"); })}>刷新记录</button></div>
+        </div>
+      </details>
+      {progress && <div className="journey-progress mt-4 rounded-xl p-4 text-sm leading-7">
+        <h3 className="mb-3 font-semibold">秦俑归阵 · 认证进度</h3>
+        <ol className="grid grid-cols-4 gap-2 text-center">{[
+          ["解锁", progress.unlocked], ["通关", progress.completed], ["收藏", progress.collected], ["展示", progress.exhibiting],
+        ].map(([name, done]) => <li key={String(name)} className={done ? "is-done" : ""}><span className="journey-step" aria-hidden="true">{done ? "✓" : "·"}</span>{name}<span className="block text-xs">{done ? "已确认" : "未完成"}</span></li>)}</ol>
+        <p className="mt-3 text-xs text-stone-600">最近认证：{time(progress.verified_at)}，不代表设备持续在线。</p>
+        <p className="mt-1 text-xs text-stone-600">已解锁游戏可离开手机，在腰牌上继续游玩。</p>
       </div>}
     </section>
+    <details className="journey-overview mb-5 rounded-2xl bg-white p-5"><summary className="cursor-pointer font-semibold">沿途热度与活动概览</summary><div className="pt-4"><ActivityOverview /></div></details>
     <div className="grid gap-5 md:grid-cols-2">
       <section className="rounded-2xl bg-white p-5"><h2 className="text-xl font-semibold">到访记录</h2>
         <p className="my-3 text-sm text-stone-600">真实扫码、接口测试与生成模拟分别标注；A 点实物到访或接口测试可解锁，生成模拟不可控制设备。</p>
         {!visits.length && <p className="py-8 text-stone-500">暂无到访。等待景区终端按接口上报。</p>}
-        <ul className="space-y-3">{visits.map(visit => {
+        <ul className="journey-visits space-y-3">{visits.map(visit => {
           const badge = badges.find(item => item.badge_id === visit.badge_id);
           const command = commands.find(item => item.event_id === visit.event_id);
           return <li key={visit.event_id}><button disabled={busy} aria-pressed={selection === visit.event_id}

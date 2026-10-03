@@ -98,13 +98,13 @@ export default function Dashboard() {
   const completedRate = progress && progress.unlocked_badges > 0
     ? `${(100 * progress.completed_badges / progress.unlocked_badges).toFixed(1)}%` : "暂无可计算数据";
 
-  return <main className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
-    <header className="flex flex-wrap items-start justify-between gap-4">
-      <div><p className="text-sm text-stone-600">长安游迹 · 固定演示会话 demo-001</p>
+  return <main className="journey-shell journey-dashboard mx-auto max-w-7xl space-y-5 p-4 md:p-8">
+    <header className="journey-hero flex flex-wrap items-start justify-between gap-4">
+      <div><p className="journey-eyebrow">长安游迹 · 活动观察</p>
         <h1 className="mt-1 text-3xl font-semibold">活动数据看板</h1>
         <p className="mt-2 text-stone-600">参与腰牌打卡数据；非实时在场人数</p></div>
       <div className="flex flex-wrap items-center gap-3">
-        <Link className="underline" href="/">手机操作页</Link>
+        <Link className="journey-link" href="/">连接腰牌 ↗</Link>
         <label>数据来源 <select className="rounded-lg border bg-white p-2" value={source}
           onChange={event => setSource(sourceSchema.parse(event.target.value))}>
           <option value="physical_scan_simulated_site">实物扫码接口 · 模拟地点</option>
@@ -124,14 +124,14 @@ export default function Dashboard() {
     {!map ? <p className={panel}>暂无所选来源的快照；不会填充虚构数值。</p> : <>
       {visits && <section className={panel} aria-label="当前活动到访汇总">
         <h2 className="text-xl font-semibold">当前活动到访汇总</h2>
-        <p className="mt-1 text-sm text-stone-600">固定会话 demo-001，自首条有效记录至快照时间；仅统计上方所选来源，不是全景区游客人数。合并短时重复扫码，只纳入时间可靠且不晚于快照的到访。</p>
+        <p className="mt-1 text-sm text-stone-600">会话 demo-001 · 当前所选来源，不是全景区游客人数。</p>
         <dl className="mt-4 grid gap-4 md:grid-cols-3">
           <div><dt className="text-sm text-stone-600">累计有效到访</dt><dd className="text-3xl font-semibold">{visits.total_visits} 次</dd></div>
           <div><dt className="text-sm text-stone-600">活动参与腰牌</dt><dd className="text-3xl font-semibold">{visits.participating_badges} 枚</dd></div>
           <div><dt className="text-sm text-stone-600">平均扫码间隔</dt><dd className="text-3xl font-semibold">{visits.average_scan_interval_seconds === null ? "暂无样本" : `${visits.average_scan_interval_seconds.toFixed(1)} 秒`}</dd></div>
         </dl>
         <p className="mt-4">节点累计到访：{visits.sites.map(site => `${site.site_id} ${siteNames[site.site_id]} ${site.visits} 次`).join("；")}</p>
-        <p className="mt-2 text-sm text-stone-600">间隔样本 {visits.interval_samples} 对，比较同一腰牌相邻时间可靠的有效到访，含同节点再次到访；不是实际停留时长。排除时间不可靠 {visits.excluded_untrusted_events} 条、未来时间 {visits.excluded_future_events} 条。</p>
+        <details className="journey-details mt-3"><summary>统计口径与样本</summary><p className="mt-2 text-sm text-stone-600">自首条有效记录至快照时间；合并短时重复扫码，只纳入时间可靠且不晚于快照的到访。间隔样本 {visits.interval_samples} 对，比较同一腰牌相邻有效到访，含同节点再次到访；不是实际停留时长。排除时间不可靠 {visits.excluded_untrusted_events} 条、未来时间 {visits.excluded_future_events} 条。</p></details>
       </section>}
       <section className={panel}>
         <h2 className="text-xl font-semibold">节点示意与近期热度</h2>
@@ -162,13 +162,13 @@ export default function Dashboard() {
             </li>)}</ul>
             <p className="mt-2 text-xs text-stone-600">窗口以当前快照时间为界；估计目标为快照之后五分钟。这是明示权重的统计估计，不是训练模型，不显示准确率，不参与解锁、推荐候选热度或现场安全决策。</p>
           </div>
-          <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm">
+          <details className="journey-details mt-4"><summary>查看各时间窗明细</summary><div className="mt-3 overflow-x-auto"><table className="w-full text-left text-sm">
             <thead><tr><th className="py-2">时间窗（左开右闭）</th>{map.sites.map(site => <th key={site.site_id}>{site.site_id} · {siteNames[site.site_id]}</th>)}</tr></thead>
             <tbody>{windows.map(window => <tr className="border-t" key={window.window_start}>
               <td className="py-2">{clock(window.window_start)}—{clock(window.window_end)}</td>
               {map.sites.map(site => <td key={site.site_id}>{map.trend.find(point => point.site_id === site.site_id && point.window_start === window.window_start)?.unique_badges ?? "无数据"}</td>)}
             </tr>)}</tbody>
-          </table></div>
+          </table></div></details>
         </section>
         <div className="space-y-6">
           <section className={panel}><h2 className="text-xl font-semibold">已观察到的节点转移</h2>

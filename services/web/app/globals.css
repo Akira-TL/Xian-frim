@@ -1,8 +1,50 @@
 @import "tailwindcss";
 
 :root { color-scheme: light; }
-body { margin: 0; background: #f5f2eb; color: #282d30; font-family: system-ui, sans-serif; }
+body { margin: 0; background: #f5f0e7; color: #302c27; font-family: system-ui, sans-serif; }
 button, input, select { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .5; }
 :focus-visible { outline: 3px solid #9b4b32; outline-offset: 3px; }
+
+.journey-shell { --journey-ink: #292f2c; --journey-red: #973e2d; --journey-line: #e4dacb; }
+.journey-hero { position: relative; overflow: hidden; padding: 28px; border: 1px solid #e2d3bf; border-radius: 24px; background: linear-gradient(115deg, #f8e8ca, #fffaf1 65%, #ede5d6); }
+.journey-hero::after { content: ""; position: absolute; right: -45px; bottom: -105px; width: 250px; height: 250px; border: 1px solid #c8a97355; border-radius: 50%; box-shadow: 0 0 0 22px #c8a97312, 0 0 0 44px #c8a97310; pointer-events: none; }
+.journey-hero > * { position: relative; z-index: 1; }
+.journey-hero h1 { font-family: "Noto Serif CJK SC", "Songti SC", serif; letter-spacing: .08em; color: #292f2c; }
+.journey-eyebrow { color: #8c6041; font-size: 12px; letter-spacing: .18em; }
+.journey-link { display: inline-flex; align-items: center; gap: 12px; color: #843b2c; font-size: 14px; font-weight: 600; text-decoration: none; }
+.journey-shell section, .journey-shell > details { border: 1px solid var(--journey-line); box-shadow: 0 6px 24px #49351b04; }
+.journey-shell h2 { letter-spacing: .02em; }
+.journey-connect { border-top: 3px solid var(--journey-red) !important; }
+.journey-status { display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; padding: 5px 10px; background: #f0ebe4; color: #70665a; font-size: 12px; white-space: nowrap; }
+.journey-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.journey-status.is-connected { background: #e7efe5; color: #365d40; }
+.journey-shell select, .journey-shell input { border-color: #d9ccbb; background: #fffdf9; min-height: 44px; }
+.journey-shell button { transition: background-color .15s, border-color .15s; }
+.journey-primary { background: var(--journey-red); min-height: 52px; box-shadow: 0 4px 12px #973e2d20; font-weight: 600; }
+.journey-primary:hover:not(:disabled) { background: #803325; }
+.journey-secondary { border: 1px solid #d9ccbb; border-radius: 12px; padding: 11px 16px; min-height: 44px; background: #fffdf9; color: #4f4437; }
+.journey-secondary:hover:not(:disabled) { background: #f5edde; }
+.journey-details { border-top: 1px solid #eee6db; padding-top: 12px; color: #706252; font-size: 13px; }
+.journey-details summary { cursor: pointer; min-height: 30px; }
+.journey-progress { background: #f5f2e9; border: 1px solid #e4dece; }
+.journey-step { display: flex; margin: 0 auto 5px; justify-content: center; align-items: center; height: 30px; width: 30px; border-radius: 50%; background: #e6e0d6; color: #8f8578; font-size: 18px; }
+.is-done .journey-step { background: #344d3c; color: #fff; }
+.journey-visits { max-height: 480px; overflow-y: auto; padding-right: 4px; scrollbar-width: thin; }
+.journey-visits button[aria-pressed="true"] { border-color: #973e2d; background: #fcf1e6; box-shadow: inset 3px 0 #973e2d; }
+.journey-dashboard dl > div { border-left: 3px solid #b99860; padding: 5px 16px; background: #faf7f0; border-radius: 0 10px 10px 0; }
+.journey-dashboard dd { color: #343e33; font-variant-numeric: tabular-nums; }
+.journey-dashboard th { font-weight: 600; color: #78634c; }
+.journey-dashboard td { padding: 10px 0; }
+.journey-dashboard header label { font-size: 13px; }
+.journey-dashboard header select { max-width: 100%; }
+@media (max-width: 640px) {
+  .journey-hero { padding: 22px; }
+  .journey-hero h1 { font-size: 32px; }
+  .journey-dashboard header > div { width: 100%; }
+  .journey-dashboard header label { display: block; width: 100%; }
+  .journey-dashboard header select { display: block; width: 100%; margin-top: 8px; }
+  .journey-dashboard dl { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { .journey-shell button { transition: none; } }
