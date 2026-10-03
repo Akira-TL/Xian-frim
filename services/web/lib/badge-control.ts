@@ -1,4 +1,5 @@
 import type { createApi } from "./api.ts";
+import type { CoverChannel } from "./cover-transfer.ts";
 import { badgeRuntimeSchema, stateSchema, type Badge, type BadgeRuntime, type DeviceState, type Envelope, type Visit } from "./contracts.ts";
 
 export interface BadgeLink {
@@ -7,6 +8,7 @@ export interface BadgeLink {
   write(packet: Uint8Array): Promise<void>;
   reply(): Promise<Uint8Array>;
   snapshot?(): Promise<BadgeRuntime | undefined>;
+  cover?(): Promise<CoverChannel>;
   close(): void;
 }
 export type ControlPhase = "checking" | "authorizing" | "sending" | "sent" | "verifying" | "confirmed";

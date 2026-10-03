@@ -37,7 +37,30 @@ export async function connectBadge(onDisconnect: () => void, options: {snapshotO
     };
     if (options.snapshotOnly) {
       const unused = async (): Promise<never> => { throw new Error("直接同步连接不使用授权控制命令"); };
-      return {snapshot:readSnapshot, close:disconnect, identity:unused, nonce:unused, write:unused, reply:unused};
+      let coverCharacteristic: BluetoothRemoteGATTCharacteristic | undefined;
+      const cover = async () => {
+        live();
+        if (!coverCharacteristic) {
+          try { coverCharacteristic = await service.getCharacteristic(characteristic("7")); }
+          catch { throw new Error("当前吧唧固件还不支持传图，请烧录新版固件后重试"); }
+        }
+        live();
+        const image = coverCharacteristic;
+        if (!image.properties.write) throw new Error("吧唧图片接口不支持带响应写入");
+        return {
+          async read() {
+            live(); const value = await image.readValue(); live();
+            return new Uint8Array(value.buffer, value.byteOffset, value.byteLength).slice();
+          },
+          async write(value: Uint8Array) {
+            live();
+            if (value.length < 7 || value.length > 191) throw new Error("图片分片长度无效");
+            await image.writeValueWithResponse(Uint8Array.from(value).buffer); live();
+          },
+          close: () => { disconnect(); onDisconnect(); },
+        };
+      };
+      return {snapshot:readSnapshot, cover, close:disconnect, identity:unused, nonce:unused, write:unused, reply:unused};
     }
     const identity = await service.getCharacteristic(characteristic("2")); live();
     const nonce = await service.getCharacteristic(characteristic("4")); live();

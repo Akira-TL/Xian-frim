@@ -16,7 +16,9 @@ test("直接同步只读取快照特征，不获取身份、随机数和授权�
  const bytes=new TextEncoder().encode(JSON.stringify(snapshot));
  const device={gatt:{connected:true,connect:async()=>{},disconnect:()=>{},
   getPrimaryService:async()=>({getCharacteristic:async(uuid:string)=>{
-   calls.push(uuid);return {readValue:async()=>new DataView(bytes.buffer)};
+   calls.push(uuid);
+   if(uuid === "5e994007-64aa-4a10-b1f1-78ce02b3974f") throw new Error("旧固件无传图特征");
+   return {readValue:async()=>new DataView(bytes.buffer)};
   }})},addEventListener:()=>{},removeEventListener:()=>{}};
  const oldWindow=Object.getOwnPropertyDescriptor(globalThis,"window");
  const oldNavigator=Object.getOwnPropertyDescriptor(globalThis,"navigator");
@@ -26,6 +28,9 @@ test("直接同步只读取快照特征，不获取身份、随机数和授权�
   const link=await connectBadge(()=>{}, {snapshotOnly:true});
   assert.deepEqual(await readDemoSnapshot(link),snapshot);
   assert.deepEqual(calls,["5e994003-64aa-4a10-b1f1-78ce02b3974f"]);
+  await assert.rejects(link.cover!(),/不支持传图/);
+  assert.deepEqual(await readDemoSnapshot(link),snapshot);
+  assert.deepEqual(calls,["5e994003-64aa-4a10-b1f1-78ce02b3974f","5e994007-64aa-4a10-b1f1-78ce02b3974f"]);
   link.close();
  }finally{
   if(oldWindow)Object.defineProperty(globalThis,"window",oldWindow);else Reflect.deleteProperty(globalThis,"window");
