@@ -16,6 +16,9 @@ static struct {
     view_t view;
     view_t settings_return;
     bool game_started;
+    exploration_game_t game;
+    exploration_snapshot_t snapshot;
+    bool switching;
     qin_progress_t progress;
     qin_puzzle_t puzzle;
     const char *notice;
@@ -34,6 +37,39 @@ static struct {
 } pg;
 
 static void render(void);
+static const char *const game_names[] = {"秦俑归阵", "城门寻宝", "诗句补全"};
+static const char *const reward_names[] = {"秦俑守护", "长安城门", "诗意长安"};
+static const qin_art_id_t game_art[] = {QIN_ART_GUARDIAN, QIN_ART_GATE, QIN_ART_POEM};
+
+static bool collected(void)
+{
+    return pg.game == GAME_QIN ? pg.progress.collected :
+        (pg.snapshot.bonus_collected & (1u << (pg.game - 1))) != 0;
+}
+
+static void finish_switch(void *value)
+{
+    int direction = (int)(intptr_t)value;
+    pg.switching = false;
+    if (!pg.root || (pg.view != VIEW_GAMES && pg.view != VIEW_COLLECTION)) return;
+    pg.game = (exploration_game_t)((pg.game + GAME_COUNT + direction) % GAME_COUNT);
+    pg.notice = NULL;
+    render();
+}
+
+static void swipe(lv_event_t *event)
+{
+    (void)event;
+    if (pg.switching || (pg.view != VIEW_GAMES && pg.view != VIEW_COLLECTION)) return;
+    lv_indev_t *input = lv_indev_active();
+    if (!input) return;
+    lv_dir_t direction = lv_indev_get_gesture_dir(input);
+    if (direction != LV_DIR_LEFT && direction != LV_DIR_RIGHT) return;
+    // 先结束本次按压，再换页；滑动结束不能误触主按钮。
+    lv_indev_wait_release(input);
+    pg.switching = true;
+    lv_async_call(finish_switch, (void *)(intptr_t)(direction == LV_DIR_LEFT ? 1 : -1));
+}
 
 static void readable_text(lv_obj_t *object)
 {
@@ -133,6 +169,15 @@ static void navigate(lv_event_t *event)
     view_t target = (view_t)(intptr_t)lv_event_get_user_data(event);
     pg.notice = NULL;
     if (target == VIEW_GAME) {
+        if (pg.game != GAME_QIN) {
+            exploration_snapshot(&pg.snapshot);
+            bonus_round_t round = pg.snapshot.rounds[pg.game - 1];
+            if ((!round.started || round.stage == bonus_total(pg.game)) &&
+                exploration_bonus_begin(pg.game) != ESP_OK) {
+                pg.notice = "暂不能开始，请重试";
+                target = VIEW_INTRO;
+            }
+        } else {
         // 返回、设置和选游戏只暂停。只有首次开始或完成后的再玩才初始化拼图。
         qin_puzzle_t current;
         if (exploration_get(NULL, &current, NULL) != ESP_OK ||
@@ -142,6 +187,7 @@ static void navigate(lv_event_t *event)
         } else {
             pg.game_started = true;
         }
+        }
     }
     pg.view = target;
     render();
@@ -150,7 +196,7 @@ static void navigate(lv_event_t *event)
 static void restart_game(lv_event_t *event)
 {
     (void)event;
-    if (exploration_begin() != ESP_OK) {
+    if ((pg.game == GAME_QIN ? exploration_begin() : exploration_bonus_begin(pg.game)) != ESP_OK) {
         pg.notice = "暂不能重新开始";
     } else {
         pg.game_started = true;
@@ -307,13 +353,69 @@ static void drag_piece(lv_event_t *event)
 static void exhibit(lv_event_t *event)
 {
     (void)event;
-    if (exploration_exhibit() == ESP_OK) {
+    if (exploration_display_game(pg.game) == ESP_OK) {
         pg.view = VIEW_EXHIBIT;
         pg.notice = NULL;
     } else {
         pg.notice = "展示保存失败，请重试";
     }
     render();
+}
+
+static void answer(lv_event_t *event)
+{
+    bonus_result_t result;
+    if (exploration_bonus_answer(pg.game, (uint8_t)(intptr_t)lv_event_get_user_data(event), &result) != ESP_OK) {
+        pg.notice = "保存失败，请重试";
+    } else if (result == BONUS_COMPLETED) {
+        pg.view = VIEW_SUCCESS;
+        pg.notice = "通关，已加入收藏";
+        ui_tool_play_game_sound();
+    } else if (result == BONUS_ADVANCED) {
+        pg.notice = NULL;
+        ui_tool_play_game_sound();
+    } else {
+        pg.notice = "再试一次";
+    }
+    render();
+}
+
+static void art_card(qin_art_id_t art, int x, int y, int size)
+{
+    lv_obj_t *card = lv_obj_create(pg.root);
+    lv_obj_remove_style_all(card);
+    lv_obj_set_pos(card, x, y);
+    lv_obj_set_size(card, size, size);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    qin_art_add(card, art, size, size);
+}
+
+static void render_bonus_game(void)
+{
+    bonus_round_t round = pg.snapshot.rounds[pg.game - 1];
+    if (pg.game == GAME_GATE) {
+        art_card(QIN_ART_GATE, 80, 65, 200);
+        // 图片坐标：门洞居中下方、旗在左上、鼓在右下；不使用与图片无关的假按钮。
+        static const int regions[3][4] = {{155, 185, 60, 55}, {80, 65, 70, 90}, {225, 188, 55, 68}};
+        for (unsigned i = 0; i < 3; ++i) {
+            lv_obj_t *target = button(NULL, regions[i][0], regions[i][1], regions[i][2], answer, i);
+            lv_obj_set_height(target, regions[i][3]);
+            lv_obj_set_style_bg_opa(target, LV_OPA_TRANSP, LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(target, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_PRESSED);
+        }
+        static const char *const hints[] = {"找到城门", "找到红旗", "找到大鼓"};
+        label(pg.notice ? pg.notice : hints[round.stage < 3 ? round.stage : 2], 253);
+    } else {
+        art_card(QIN_ART_POEM, 136, 67, 88);
+        label(round.stage == 0 ? "床前明月光" : "白日依山尽", 166);
+        label(pg.notice ? pg.notice : "选出下一句", 198);
+        const char *choices[2] = {round.stage == 0 ? "疑是地上霜" : "举头望明月",
+                                 "黄河入海流"};
+        lv_obj_set_height(button(choices[0], 55, 233, 122, answer, 0), 42);
+        lv_obj_set_height(button(choices[1], 183, 233, 122, answer, 1), 42);
+    }
+    lv_obj_set_height(button("退出", 78, 291, 98, navigate, VIEW_GAMES), 44);
+    lv_obj_set_height(button("设置", 184, 291, 98, open_settings, 0), 44);
 }
 
 static void render(void)
@@ -323,6 +425,7 @@ static void render(void)
         EXPLORATION_COVER, EXPLORATION_SELECTION, EXPLORATION_INTRO, EXPLORATION_PLAYING,
         EXPLORATION_RESULT, EXPLORATION_COLLECTION, EXPLORATION_EXHIBIT, EXPLORATION_SETTINGS};
     exploration_set_screen(screens[pg.view]);
+    exploration_set_game(pg.game);
     pg.drag.object = NULL;
     pg.instruction = NULL;
     lv_obj_clean(pg.root);
@@ -340,11 +443,13 @@ static void render(void)
         button("设置", 110, 220, 140, open_settings, 0);
         return;
     }
+    exploration_snapshot(&pg.snapshot);
     if (pg.view == VIEW_HOME) qin_art_add(pg.root, QIN_ART_COVER, 360, 360);
-    title(pg.view == VIEW_GAME || pg.view == VIEW_INTRO ? "秦俑归阵" :
-          pg.view == VIEW_GAMES ? "选择游戏" : pg.view == VIEW_SUCCESS ? "拼接完成" :
+    title(pg.view == VIEW_GAME || pg.view == VIEW_INTRO ? game_names[pg.game] :
+          pg.view == VIEW_GAMES ? "选择游戏" : pg.view == VIEW_SUCCESS ? "通关成功" :
           pg.view == VIEW_COLLECTION ? "我的收藏" : "长安游迹");
     if (pg.view == VIEW_GAME) {
+        if (pg.game != GAME_QIN) { render_bonus_game(); return; }
         const int piece_x[] = {48, 240, 48};
         const int piece_y[] = {176, 110, 110};
         for (unsigned i = 0; i < 3; ++i) {
@@ -376,21 +481,21 @@ static void render(void)
         lv_obj_set_pos(art, 108, 76);
         lv_obj_set_size(art, 144, 130);
         lv_obj_clear_flag(art, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-        qin_art_add(art, QIN_ART_GUARDIAN, 144, 130);
-        label(pg.notice ? pg.notice : "秦俑守护已收藏", 208);
+        qin_art_add(art, game_art[pg.game], 144, 130);
+        label(pg.notice ? pg.notice : "通关，已加入收藏", 208);
         lv_obj_t *display = button("设为展示", 70, 238, 220, exhibit, 0);
         primary(display);
         lv_obj_set_height(display, 48);
         lv_obj_set_height(button("查看收藏", 78, 291, 98, navigate, VIEW_COLLECTION), 44);
         lv_obj_set_height(button("选游戏", 184, 291, 98, navigate, VIEW_GAMES), 44);
     } else if (pg.view == VIEW_COLLECTION || pg.view == VIEW_EXHIBIT) {
-        if (pg.progress.collected) {
+        if (collected()) {
             lv_obj_t *art = button(NULL, 80, 80, 200, navigate, VIEW_COLLECTION);
             lv_obj_set_height(art, 160);
             lv_obj_set_style_bg_opa(art, LV_OPA_TRANSP, 0);
             lv_obj_set_style_border_width(art, 0, 0);
             lv_obj_clear_flag(art, LV_OBJ_FLAG_SCROLLABLE);
-            if (!qin_art_add(art, QIN_ART_REWARD, 200, 160)) {
+            if (!qin_art_add(art, pg.game == GAME_QIN ? QIN_ART_REWARD : game_art[pg.game], 200, 160)) {
                 for (unsigned i = 0; i < 3; ++i) {
                     lv_obj_t *part = lv_obj_create(art);
                     lv_obj_remove_style_all(part);
@@ -400,7 +505,7 @@ static void render(void)
                     fragment(part, i);
                 }
             }
-            label(pg.notice ? pg.notice : "秦俑守护", 240);
+            label(pg.notice ? pg.notice : reward_names[pg.game], 240);
             if (pg.view == VIEW_COLLECTION) {
                 lv_obj_t *display = button("设为展示", 65, 276, 140, exhibit, 0);
                 primary(display);
@@ -410,8 +515,9 @@ static void render(void)
             else
                 button("首页", 110, 276, 140, navigate, VIEW_HOME);
         } else {
-            label("完成游戏，收藏秦俑", 140);
-            button("首页", 110, 260, 140, navigate, VIEW_HOME);
+            art_card(game_art[pg.game], 116, 80, 128);
+            label("通关后收藏 · 左右滑动", 225);
+            button("返回", 110, 276, 140, navigate, VIEW_GAMES);
         }
     } else if (pg.view == VIEW_GAMES || pg.view == VIEW_INTRO) {
         lv_obj_t *art = lv_obj_create(pg.root);
@@ -419,23 +525,26 @@ static void render(void)
         lv_obj_set_pos(art, 116, 65);
         lv_obj_set_size(art, 128, 128);
         lv_obj_clear_flag(art, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-        qin_art_add(art, QIN_ART_GUARDIAN, 128, 128);
-        lv_obj_t *status = label(pg.notice ? pg.notice : (pg.progress.unlocked ?
-            (pg.view == VIEW_INTRO ? "拖动三片，拼回秦俑" : "三片拼接，收藏秦俑") : "扫码解锁游戏"), 194);
+        qin_art_add(art, game_art[pg.game], 128, 128);
+        static const char *const indicators[] = {"1 / 3 · 左右滑动", "2 / 3 · 左右滑动", "3 / 3 · 左右滑动"};
+        static const char *const descriptions[] = {"拖动三片，拼回秦俑", "按提示找门、旗、鼓", "补全两句唐诗"};
+        lv_obj_t *status = label(pg.notice ? pg.notice : pg.view == VIEW_GAMES ? indicators[pg.game] :
+            pg.game != GAME_QIN || pg.progress.unlocked ? descriptions[pg.game] : "扫码解锁游戏", 194);
         lv_obj_set_style_text_color(status, lv_color_hex(0x6e654d), 0);
-        bool resume = pg.game_started && pg.puzzle.placed_mask != 7;
-        lv_obj_t *play = button(pg.view == VIEW_GAMES ? "秦俑归阵" :
-            (resume ? "继续游戏" : pg.progress.completed ? "再玩一次" : "开始游戏"),
+        bool resume = pg.game == GAME_QIN ? pg.game_started && pg.puzzle.placed_mask != 7 :
+            pg.snapshot.rounds[pg.game - 1].started && pg.snapshot.rounds[pg.game - 1].stage < bonus_total(pg.game);
+        lv_obj_t *play = button(pg.view == VIEW_GAMES ? game_names[pg.game] :
+            (resume ? "继续游戏" : collected() ? "再玩一次" : "开始游戏"),
             70, 226, 220, navigate, pg.view == VIEW_GAMES ? VIEW_INTRO : VIEW_GAME);
         lv_obj_set_height(play, 50);
         primary(play);
         lv_obj_t *caption = lv_obj_get_child(play, 0);
         lv_obj_set_style_transform_scale_x(caption, 384, 0);
         lv_obj_set_style_transform_scale_y(caption, 384, 0);
-        if (pg.view == VIEW_INTRO && !pg.progress.unlocked) lv_obj_add_state(play, LV_STATE_DISABLED);
+        if (pg.view == VIEW_INTRO && pg.game == GAME_QIN && !pg.progress.unlocked) lv_obj_add_state(play, LV_STATE_DISABLED);
         lv_obj_set_height(button(pg.view == VIEW_GAMES ? "封面" : "返回", 82, 286, 94,
             navigate, pg.view == VIEW_GAMES ? VIEW_HOME : VIEW_GAMES), 44);
-        if (pg.view == VIEW_INTRO && resume && pg.puzzle.placed_mask)
+        if (pg.view == VIEW_INTRO && resume && (pg.game != GAME_QIN || pg.puzzle.placed_mask))
             lv_obj_set_height(button("重新开始", 184, 286, 94, restart_game, 0), 44);
         else
             lv_obj_set_height(button("收藏", 184, 286, 94, navigate, VIEW_COLLECTION), 44);
@@ -470,6 +579,8 @@ static void load(page_base_t *self)
     pg.root = self->root;
     pg.view = VIEW_HOME;
     pg.game_started = false;
+    pg.game = GAME_QIN;
+    pg.switching = false;
     pg.notice = NULL;
     pg.hint_piece = -1;
     pg.hint_until = 0;
@@ -484,7 +595,9 @@ static void load(page_base_t *self)
     lv_obj_set_style_border_color(pg.root, lv_color_hex(0xb99861), 0);
     lv_obj_set_style_border_width(pg.root, 2, 0);
     lv_obj_set_style_border_post(pg.root, true, 0);
-    lv_obj_clear_flag(pg.root, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(pg.root, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_remove_event_cb(pg.root, swipe);
+    lv_obj_add_event_cb(pg.root, swipe, LV_EVENT_GESTURE, NULL);
     render();
     pg.timer = lv_timer_create(poll, 300, NULL);
 }
@@ -497,6 +610,8 @@ static void unload(page_base_t *self)
     pg.drag.object = NULL;
     pg.instruction = NULL;
     pg.root = NULL;
+    lv_async_call_cancel(finish_switch, (void *)(intptr_t)1);
+    lv_async_call_cancel(finish_switch, (void *)(intptr_t)-1);
 }
 
 static void configure(page_base_t *self)

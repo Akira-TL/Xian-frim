@@ -40,6 +40,7 @@ add_executable(qin_page_test qin_page_test.c
     "${PROJECT_ROOT}/main/display/page/exploration/qin_slot.c"
     "${PROJECT_ROOT}/main/display/page/exploration/qin_art.c"
     "${PROJECT_ROOT}/main/services/exploration/qin_game.c"
+    "${PROJECT_ROOT}/main/services/exploration/bonus_game.c"
     "${PROJECT_ROOT}/main/display/assert/font/font_puhui_18_4.c")
 foreach(NAME head body legs reward guardian cover gate poem)
     target_sources(qin_page_test PRIVATE "${FIRMWARE_BUILD_DIR}/qin-assets/qin_${NAME}.c")

@@ -13,7 +13,27 @@ static unsigned begin_calls, brightness_writes, volume_writes;
 static uint8_t brightness = 50;
 static int volume = 50;
 static exploration_screen_t current_screen;
+static exploration_game_t current_game;
+static bonus_round_t rounds[2];
+static uint8_t bonus_collected;
+static uint8_t exhibit_game = GAME_COUNT;
 esp_err_t exploration_set_screen(exploration_screen_t screen) { current_screen = screen; return ESP_OK; }
+esp_err_t exploration_set_game(exploration_game_t game) { current_game = game; return ESP_OK; }
+esp_err_t exploration_snapshot(exploration_snapshot_t *out)
+{
+    *out = (exploration_snapshot_t){.progress = progress, .puzzle = puzzle, .screen = current_screen,
+        .game = current_game, .bonus_collected = bonus_collected, .exhibit_game = exhibit_game};
+    memcpy(out->rounds, rounds, sizeof(rounds));
+    return ESP_OK;
+}
+esp_err_t exploration_bonus_begin(exploration_game_t game)
+{ bonus_begin(&rounds[game - 1]); return ESP_OK; }
+esp_err_t exploration_bonus_answer(exploration_game_t game, uint8_t choice, bonus_result_t *result)
+{
+    *result = bonus_answer(game, &rounds[game - 1], choice);
+    if (*result == BONUS_COMPLETED) bonus_collected |= 1u << (game - 1);
+    return ESP_OK;
+}
 static uint8_t framebuffer[360 * 360 * 2];
 
 // 边界替身：不访问串口、NVS、真实扬声器或用户进度。
@@ -30,6 +50,13 @@ esp_err_t exploration_select(uint8_t piece, qin_result_t *result)
 esp_err_t exploration_place(uint8_t slot, qin_result_t *result)
 { *result = qin_place(&progress, &puzzle, slot); return ESP_OK; }
 esp_err_t exploration_exhibit(void) { return qin_exhibit(&progress) ? ESP_OK : ESP_FAIL; }
+esp_err_t exploration_display_game(exploration_game_t game)
+{
+    if (game == GAME_QIN && exploration_exhibit() != ESP_OK) return ESP_FAIL;
+    if (game != GAME_QIN && !(bonus_collected & (1u << (game - 1)))) return ESP_FAIL;
+    exhibit_game = game;
+    return ESP_OK;
+}
 uint8_t ui_tool_get_brightness(void) { return brightness; }
 int ui_tool_get_volume(void) { return volume; }
 void ui_tool_set_brightness(uint8_t value) { brightness = value; ++brightness_writes; }
@@ -204,8 +231,58 @@ int main(void)
     capture(display, "exhibit");
     click(page.root, "首页");
     assert(current_screen == EXPLORATION_COVER);
+    click(page.root, "开始探索");
+    lv_obj_update_layout(page.root);
+    drag(input, x + 270, y + 140, x + 90, y + 140);
+    lv_timer_handler();
+    assert(current_game == GAME_GATE && current_screen == EXPLORATION_SELECTION);
+    assert(find_button(page.root, "城门寻宝"));
+    capture(display, "gate-selection");
+    click(page.root, "城门寻宝");
+    click(page.root, "开始游戏");
+    capture(display, "gate-game");
+    lv_obj_update_layout(page.root);
+    // 先点错旗，阶段不增加，再按门、旗、鼓完成。
+    drag(input, x + 110, y + 100, x + 110, y + 100);
+    assert(rounds[0].stage == 0 && rounds[0].mistakes == 1);
+    lv_obj_update_layout(page.root);
+    drag(input, x + 180, y + 215, x + 180, y + 215);
+    assert(rounds[0].stage == 1);
+    click(page.root, "设置"); click(page.root, "返回");
+    assert(rounds[0].stage == 1);
+    click(page.root, "退出");
+    lv_obj_update_layout(page.root);
+    drag(input, x + 270, y + 140, x + 90, y + 140);
+    lv_timer_handler();
+    assert(current_game == GAME_POEM);
+    click(page.root, "诗句补全"); click(page.root, "开始游戏");
+    capture(display, "poem-game");
+    click(page.root, "黄河入海流");
+    assert(rounds[1].stage == 0);
+    click(page.root, "疑是地上霜");
+    assert(rounds[1].stage == 1);
+    click(page.root, "黄河入海流");
+    assert(current_screen == EXPLORATION_RESULT && bonus_collected == 2);
+    click(page.root, "设为展示");
+    assert(current_screen == EXPLORATION_EXHIBIT && exhibit_game == GAME_POEM);
+    capture(display, "poem-exhibit");
+    click(page.root, "首页"); click(page.root, "开始探索");
+    lv_obj_update_layout(page.root);
+    drag(input, x + 90, y + 140, x + 270, y + 140);
+    lv_timer_handler();
+    assert(current_game == GAME_GATE);
+    click(page.root, "城门寻宝"); click(page.root, "继续游戏");
+    assert(rounds[0].stage == 1);
+    lv_obj_update_layout(page.root);
+    drag(input, x + 110, y + 100, x + 110, y + 100);
+    lv_obj_update_layout(page.root);
+    drag(input, x + 250, y + 220, x + 250, y + 220);
+    assert(current_screen == EXPLORATION_RESULT && bonus_collected == 3);
+    capture(display, "gate-result");
+    // 新游戏完成不能清除秦俑认证进度。
+    assert(progress.completed && progress.collected && progress.exhibiting);
     lv_indev_delete(input);
     table->on_view_did_unload(&page);
-    puts("通过：封面、选游戏、说明与游玩切换；设置和退出保留碎片，明确重玩才重置，滑块仅松手保存");
+    puts("通过：真实左右滑动切换三游戏，寻宝点击与诗句答题、设置和切换保留进度、独立收藏展示及秦俑拖拽");
     return 0;
 }
