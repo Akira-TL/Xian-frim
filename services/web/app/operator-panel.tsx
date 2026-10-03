@@ -6,6 +6,7 @@ import type { Badge, BadgeRuntime, DeviceState, Visit } from "../lib/contracts";
 import { BadgeControl } from "../lib/badge-control";
 import { bluetoothSupport, connectBadge } from "../lib/web-bluetooth";
 import VisitorRecommendation from "./visitor-recommendation";
+import VisitorRouteGuide from "./visitor-route-guide";
 import ExploreRounded from "@mui/icons-material/ExploreRounded";
 import CollectionsBookmarkRounded from "@mui/icons-material/CollectionsBookmarkRounded";
 import RouteRounded from "@mui/icons-material/RouteRounded";
@@ -16,7 +17,6 @@ import CheckCircleRounded from "@mui/icons-material/CheckCircleRounded";
 import BluetoothRounded from "@mui/icons-material/BluetoothRounded";
 import SyncRounded from "@mui/icons-material/SyncRounded";
 
-const siteNames = { A: "秦俑工坊", B: "长安城门", C: "诗意庭院" };
 type Tab = "explore" | "collection" | "route";
 const screenNames = {cover: "入口封面", selection: "选择游戏", intro: "准备开始", playing: "正在游玩",
   result: "通关成功", collection: "查看收藏", exhibit: "展示收藏", settings: "调整设置"};
@@ -136,8 +136,8 @@ export default function OperatorPanel() {
     {name: "展示", done: runtime?.v === 2 && runtime.exhibit_game === localGame.index, Icon: ImageRounded},
   ] : [{ name: "解锁", done: progress?.unlocked, Icon: LockOpenRounded }, { name: "通关", done: progress?.completed, Icon: SportsEsportsRounded },
     { name: "收藏", done: progress?.collected, Icon: CollectionsBookmarkRounded }, { name: "展示", done: runtime?.v === 2 ? runtime.exhibit_game === 0 : progress?.exhibiting, Icon: ImageRounded }];
-  return <main className={`visitor-app${runtime?.screen ? " has-runtime" : ""}`}>
-    <header className="visitor-header"><h1>长安游迹</h1>
+  return <main className={`visitor-app${runtime?.screen ? " has-runtime" : ""}${tab === "route" ? " is-route" : ""}`}>
+    {tab !== "route" && <><header className="visitor-header"><h1>长安游迹</h1>
       <Image src="/xks/images/changan-gate-v3.webp" width={780} height={260} alt="云山间的长安城门" priority className="visitor-landscape" />
     </header>
     <section className="visitor-badge" aria-label="我的腰牌">
@@ -161,7 +161,7 @@ export default function OperatorPanel() {
       {connected && !progress?.unlocked && latestVisit?.site_id === "A" && <button className="visitor-primary visitor-unlock" disabled={busy || !online}
         onClick={() => void operate(() => sync(true))}>解锁秦俑归阵{latestVisit.source === "interface_test" ? "（演示）" : ""}</button>}
       {(notice || unsupported || !online) && <p className="visitor-notice" role="status">{unsupported || notice || "网络暂不可用"}</p>}
-    </section>
+    </section></>}
     {tab === "explore" && <div className="visitor-feature-grid">
       <button className="visitor-feature visitor-collection" onClick={() => setTab("collection")}><h2>我的收藏</h2>
         <Image src={shownReward ? games[shownReward.id].image : games.qin_formation.image} width={240} height={240} alt="游戏收藏" />
@@ -177,10 +177,7 @@ export default function OperatorPanel() {
             ? "腰牌展示中" : item.index ? "本地收藏" : "已收藏" : connected ? "通关后获得" : "连接后查看"}</p></div>
       </article>)}</div>
     </section>}
-    {tab === "route" && <section className="visitor-route"><h2>探索路线</h2>
-      <Image src="/xks/images/changan-gate-v3.webp" width={780} height={260} alt="长安文化探索" />
-      <ol>{(["A", "B", "C"] as const).map(site => <li key={site}><span>{siteNames[site]}</span><small>{visits.some(item => item.badge_id === badgeId && item.site_id === site && item.source === "physical_scan_simulated_site") ? "已打卡" : "待探索"}</small></li>)}</ol><p>路线示意</p>
-    </section>}
+    {tab === "route" && <VisitorRouteGuide disabled={!online} />}
     <nav className="visitor-nav" aria-label="页面导航">{([{value: "explore", name: "探索", Icon: ExploreRounded}, {value: "collection", name: "收藏", Icon: CollectionsBookmarkRounded}, {value: "route", name: "路线", Icon: RouteRounded}] as const)
       .map(({value, name, Icon}) => <button key={value} aria-current={tab === value ? "page" : undefined} onClick={() => setTab(value)}><Icon fontSize="small" />{name}</button>)}</nav>
   </main>;

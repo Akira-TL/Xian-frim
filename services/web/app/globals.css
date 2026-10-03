@@ -93,6 +93,43 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .visitor-rewards img { width:76px; height:76px; object-fit:contain; border-radius:10px; filter:grayscale(1); opacity:.55; }
 .visitor-rewards .is-collected img { filter:none; opacity:1; }
 .visitor-rewards h3 { margin:0; }
+.visitor-route-guide { padding:6px 0; }
+.visitor-app.is-route { max-width:560px; }
+.guide-heading { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
+.guide-heading span { font-size:13px; color:#8a795c; }
+.guide-heading h1 { font:600 29px/1.35 "Noto Serif CJK SC","Songti SC",serif; margin-top:5px; }
+.guide-heading > svg { width:38px; height:38px; color:#a4402d; }
+.guide-preferences { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.guide-preferences label, .guide-start label { display:grid; gap:5px; font-size:12px; color:#88765c; }
+.visitor-route-guide select { min-width:0; min-height:42px; width:100%; background:#fffaf1; color:#294434; font-size:14px; border:1px solid #ddceb4; border-radius:12px; padding:6px 8px; }
+.guide-start { display:flex; align-items:end; gap:14px; justify-content:space-between; margin-top:12px; }
+.guide-start label { flex:1; max-width:260px; }
+.guide-start > span { font-size:11px; color:#7b694f; border:1px solid #ddceb4; border-radius:999px; padding:6px 10px; margin-bottom:7px; }
+.guide-request { width:100%; margin:16px 0; min-height:46px; }
+.guide-destination { border:1px solid #e0d2b9; border-radius:20px; overflow:hidden; background:#fffaf1; }
+.guide-picture { position:relative; }
+.guide-picture img { width:100%; height:196px; object-fit:cover; }
+.guide-picture > span { position:absolute; top:12px; left:12px; border-radius:999px; background:#faf3e3ed; padding:6px 12px; color:#34543e; font-size:12px; }
+.guide-destination-body { padding:15px; }
+.guide-place-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.guide-heat { display:flex; align-items:center; gap:3px; font-size:11px; flex:none; color:#3d6947; }
+.guide-heat.heat-high { color:#ae4a34; }
+.guide-heat.heat-medium { color:#977132; }
+.guide-description { font-size:12px; color:#88785f; line-height:1.6; margin-top:8px; }
+.guide-ai-text { font-size:15px; line-height:1.6; color:#2f4e38; margin-top:10px; }
+.guide-reason { margin-top:10px; font-size:12px; color:#877659; }
+.guide-reason p { line-height:1.6; margin-top:6px; }
+.guide-actions { display:flex; gap:16px; margin-top:14px; align-items:center; }
+.guide-actions > button:first-child { flex:1; }
+.guide-actions > button:last-child { flex:1; min-height:44px; border:1px solid #dac9aa; border-radius:999px; font-size:14px; }
+.guide-decision, .guide-expired { font-size:12px; color:#946e38; margin-top:10px; }
+.guide-empty { border:1px solid #e0d2b9; background:#fffaf1; border-radius:20px; overflow:hidden; }
+.guide-empty img { width:100%; height:155px; object-fit:cover; }
+.guide-empty p { font-size:13px; text-align:center; color:#897658; padding:18px 12px; }
+.guide-demo-settings { margin-top:14px; font-size:11px; color:#938269; }
+.guide-demo-settings summary { cursor:pointer; min-height:30px; }
+.guide-demo-settings label { display:grid; gap:5px; margin-top:8px; }
+.guide-demo-settings p { margin-top:8px; line-height:1.6; }
 .visitor-route img { width: 100%; height: 88px; object-fit: cover; margin-top: 12px; }
 .visitor-route ol { margin-top: 12px; }
 .visitor-route li { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #e7dbc7; font-size: 14px; }

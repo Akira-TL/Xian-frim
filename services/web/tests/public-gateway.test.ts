@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createApi } from "../lib/api.ts";
-import { scenarioSchema, recommendationSchema } from "../lib/contracts.ts";
+import { scenarioSchema, recommendationSchema, type GuideRequest } from "../lib/contracts.ts";
 
 const web = process.env.CHANGAN_TEST_WEB_ORIGIN;
 assert.ok(web, "通过 scripts/web/test-gateway.sh 启动隔离服务后执行");
@@ -129,5 +129,22 @@ test("免登录推荐及历史查询不冒充实时模型或制造实物进度",
   const foreign = await fetch(`${web}/api/v1/recommendations`, {
     method: "POST", headers: { "Content-Type": "application/json", Origin: "https://foreign.invalid" }, body: "{}",
   });
+  assert.equal(foreign.status, 403);
+});
+
+test("无需腰牌或到访也能按游客偏好和演示热度获取指引，不改写到访", async () => {
+  const api = createApi(`${web}/api/v1`);
+  const before = await api.visits();
+  const input: GuideRequest = {start_site: "A", visitor_profile: {party: "friends", interest: "photography", pace: "normal"},
+    data_source: "generated_simulation", crowd_scenario: "balanced"};
+  const first = await api.guide(input);
+  assert.equal(first.selected_site, "B");
+  assert.equal(first.input.visitor_profile?.interest, "photography");
+  input.crowd_scenario = "gate_busy";
+  assert.equal((await api.guide(input)).selected_site, "C");
+  assert.deepEqual(await api.visits(), before);
+  assert.equal((await api.recommendationRecord(first.snapshot_id)).result.selected_site, "B");
+  const foreign = await fetch(`${web}/api/v1/guide-recommendations`, {method: "POST",
+    headers: {"Content-Type": "application/json", Origin: "https://foreign.invalid"}, body: JSON.stringify(input)});
   assert.equal(foreign.status, 403);
 });
