@@ -119,6 +119,14 @@ export default function OperatorPanel() {
     try { await action(); } catch (error) { setNotice(error instanceof Error ? error.message : "操作未完成，请重试"); }
     finally { locked.current = false; setBusy(false); }
   }
+  async function prepareTestVisit() {
+    if (!badge || !connected || progress?.unlocked) throw new Error("先连接尚未解锁的腰牌");
+    const result = await api.testVisit(badge.badge_id);
+    if (result.visit.badge_id !== badge.badge_id || result.visit.source !== "interface_test"
+      || result.visit.site_id !== "A" || !result.can_unlock) throw new Error("测试打卡未满足演示解锁条件");
+    setVisits(previous => [result.visit, ...previous.filter(item => item.event_id !== result.visit.event_id)]);
+    setNotice("A点测试打卡已准备，不计真实到访；请点击解锁秦俑归阵");
+  }
   const activeGame = games[runtime?.game_id ?? "qin_formation"];
   const liveStage = runtime?.v === 2 && runtime.game_id !== "qin_formation" ? runtime.stage :
     [0, 1, 2].filter(bit => ((runtime?.placed_mask ?? 0) & (1 << bit)) !== 0).length;
@@ -161,6 +169,11 @@ export default function OperatorPanel() {
       </div>}
       {connected && !progress?.unlocked && latestVisit?.site_id === "A" && <button className="visitor-primary visitor-unlock" disabled={busy || !online}
         onClick={() => void operate(() => sync(true))}>解锁秦俑归阵{latestVisit.source === "interface_test" ? "（演示）" : ""}</button>}
+      {connected && !progress?.unlocked && <details className="guide-demo-settings"><summary>演示解锁</summary>
+        <p>没有现场扫码时，可创建A点测试打卡。不计真实到访，也不直接修改游戏进度。</p>
+        <button type="button" className="visitor-primary" disabled={busy || !online}
+          onClick={() => void operate(prepareTestVisit)}>创建A点测试打卡</button>
+      </details>}
       {(notice || unsupported || !online) && <p className="visitor-notice" role="status">{unsupported || notice || "网络暂不可用"}</p>}
     </section></>}
     {tab === "explore" && <div className="visitor-feature-grid">

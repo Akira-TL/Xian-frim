@@ -74,15 +74,10 @@ test("免登录流程只在后台验证实际设备回执后确认解锁", async
 
 test("公开网页的专用接口测试记录沿用身份核对和真实回执认证流程", async () => {
   const { badge, link } = await fixture();
-  const response = await fetch(`${web}/api/v1/interface-test/visits`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ event_id: `interface-web-${sequence}`, session_id: "demo-001", badge_id: badge.badge_id,
-      terminal_id: "interface-test-001", site_id: "A", config_version: 1,
-      captured_at: new Date().toISOString(), time_quality: "untrusted" }),
-  });
-  assert.equal(response.status, 200);
+  const response = await api.testVisit(badge.badge_id);
+  assert.equal(response.can_unlock, true);
   const visits = await api.visits();
-  const visit = visits.find(item => item.event_id === `interface-web-${sequence}`);
+  const visit = visits.find(item => item.event_id === response.visit.event_id);
   assert.ok(visit);
   assert.equal(visit.source, "interface_test");
   const control = new BadgeControl(badge, link, api);
