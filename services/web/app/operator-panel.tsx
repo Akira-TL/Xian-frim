@@ -5,7 +5,6 @@ import { api } from "../lib/api";
 import type { Badge, BadgeRuntime, DeviceState, Visit } from "../lib/contracts";
 import { BadgeControl } from "../lib/badge-control";
 import { bluetoothSupport, connectBadge } from "../lib/web-bluetooth";
-import VisitorRecommendation from "./visitor-recommendation";
 import VisitorRouteGuide from "./visitor-route-guide";
 import ExploreRounded from "@mui/icons-material/ExploreRounded";
 import CollectionsBookmarkRounded from "@mui/icons-material/CollectionsBookmarkRounded";
@@ -166,7 +165,10 @@ export default function OperatorPanel() {
       <button className="visitor-feature visitor-collection" onClick={() => setTab("collection")}><h2>我的收藏</h2>
         <Image src={shownReward ? games[shownReward.id].image : games.qin_formation.image} width={240} height={240} alt="游戏收藏" />
         <span>{rewardCount ? `已收藏 ${rewardCount} / 3` : progress ? "通关后获得" : "连接后查看"}</span></button>
-      <VisitorRecommendation key={latestVisit?.event_id ?? badgeId} visit={latestVisit} disabled={!online || busy || !badge} />
+      <button className="visitor-feature visitor-next" onClick={() => setTab("route")}><h2>下一站</h2>
+        <Image src="/xks/images/changan-gate-v3.webp" width={780} height={260} alt="长安文化探索" />
+        <h3>按你的兴趣与节点热度</h3><span className="visitor-primary">查看路线指引</span>
+      </button>
     </div>}
     {tab === "collection" && <section className="visitor-subpage"><h2>我的收藏</h2>
       {!connected && <p>连接腰牌，查看你的收藏</p>}
