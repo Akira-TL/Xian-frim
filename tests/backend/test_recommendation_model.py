@@ -179,10 +179,13 @@ class UnverifiedCompletionModel:
 
 
 class DeniedCompletionModel:
+    def __init__(self, reason: str = "没有认证完成记录，不声称已完成或可玩。") -> None:
+        self.reason = reason
+
     async def recommend(self, snapshot: RecommendationInput) -> str:
         return ('{"snapshot_id":"' + snapshot.snapshot_id
                 + '","selected_site":"B","child_text":"下一站去城门观察图案。",'
-                '"operator_reason":"没有认证完成记录，不声称已完成或可玩。"}')
+                '"operator_reason":"' + self.reason + '"}')
 
 
 def test_explicit_denial_of_completion_is_not_a_false_positive(tmp_path: Path) -> None:
@@ -199,6 +202,21 @@ def test_explicit_denial_of_completion_is_not_a_false_positive(tmp_path: Path) -
         assert result.operator_reason == "没有认证完成记录，不声称已完成或可玩。"
 
 
+def test_denial_of_playability_or_completion_is_not_a_positive_claim(tmp_path: Path) -> None:
+    reason = "没有认证完成记录，未声称可玩或已完成。"
+    with TestClient(create_app(tmp_path / "denied-or-completion.sqlite3", "operator-test", "terminal-test", lambda: NOW,
+                              recommendation_model=DeniedCompletionModel(reason))) as client:
+        register(client)
+        post_scan(client, scan())
+        refresh_site(client, "B")
+        response = client.post("/api/v1/recommendations",
+                               content='{"badge_id":"badge-001","event_id":"scan-001"}', headers=operator())
+        assert response.status_code == 200
+        result = RecommendationResult.model_validate_json(response.text)
+        assert result.source == "model"
+        assert result.operator_reason == reason
+
+
 def test_model_cannot_turn_a_visit_without_verified_progress_into_completion(tmp_path: Path) -> None:
     with TestClient(create_app(tmp_path / "false-completion.sqlite3", "operator-test", "terminal-test", lambda: NOW,
                               recommendation_model=UnverifiedCompletionModel())) as client:
@@ -212,6 +230,20 @@ def test_model_cannot_turn_a_visit_without_verified_progress_into_completion(tmp
         assert result.source == "rule_fallback" and result.fallback_reason == "invalid_output"
         assert "已完成A站" not in result.operator_reason
         assert result.input.completed_games == []
+
+
+def test_denial_in_previous_clause_does_not_allow_a_positive_completion_claim(tmp_path: Path) -> None:
+    with TestClient(create_app(tmp_path / "denial-then-claim.sqlite3", "operator-test", "terminal-test", lambda: NOW,
+                              recommendation_model=DeniedCompletionModel("未声称可玩，但已完成A站。"))) as client:
+        register(client)
+        post_scan(client, scan())
+        refresh_site(client, "B")
+        response = client.post("/api/v1/recommendations",
+                               content='{"badge_id":"badge-001","event_id":"scan-001"}', headers=operator())
+        assert response.status_code == 200
+        result = RecommendationResult.model_validate_json(response.text)
+        assert result.source == "rule_fallback" and result.fallback_reason == "invalid_output"
+        assert client.get("/api/v1/unlock-commands", headers=operator()).text == "[]"
 
 
 @pytest.mark.parametrize("fault", ["non_json", "snapshot", "candidate", "blank", "long", "extra", "oversize"])

@@ -205,7 +205,8 @@ class RecommendationService:
         if (output.snapshot_id != result.snapshot_id or not any(
                 candidate.site.site_id == output.selected_site for candidate in result.input.candidates)):
             raise ValueError("模型快照或候选不匹配")
-        negative_prefixes = ("不声称", "未声称", "不会声称", "不表示", "未表示", "没有", "暂无", "无", "不能说")
+        negative_prefixes = ("不声称", "未声称", "不会声称", "不表示", "未表示", "没有", "暂无", "无", "不能说",
+                             "不声称可玩或", "未声称可玩或", "不会声称可玩或")
         if not result.input.completed_games and any(
                 not text[:match.start()].endswith(negative_prefixes)
                 for text in (output.child_text, output.operator_reason)
