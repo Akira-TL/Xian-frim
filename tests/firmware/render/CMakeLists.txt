@@ -26,7 +26,7 @@ add_subdirectory("${PROJECT_ROOT}/managed_components/lvgl__lvgl" lvgl)
 add_executable(qin_render_test qin_render_test.c
     "${PROJECT_ROOT}/main/display/page/exploration/qin_slot.c"
     "${PROJECT_ROOT}/main/display/page/exploration/qin_art.c")
-foreach(NAME head body legs reward guardian cover)
+foreach(NAME head body legs reward guardian cover gate poem)
     target_sources(qin_render_test PRIVATE "${FIRMWARE_BUILD_DIR}/qin-assets/qin_${NAME}.c")
 endforeach()
 target_include_directories(qin_render_test PRIVATE
@@ -41,7 +41,7 @@ add_executable(qin_page_test qin_page_test.c
     "${PROJECT_ROOT}/main/display/page/exploration/qin_art.c"
     "${PROJECT_ROOT}/main/services/exploration/qin_game.c"
     "${PROJECT_ROOT}/main/display/assert/font/font_puhui_18_4.c")
-foreach(NAME head body legs reward guardian cover)
+foreach(NAME head body legs reward guardian cover gate poem)
     target_sources(qin_page_test PRIVATE "${FIRMWARE_BUILD_DIR}/qin-assets/qin_${NAME}.c")
 endforeach()
 target_compile_definitions(qin_page_test PRIVATE SIMULATOR LV_LVGL_H_INCLUDE_SIMPLE)

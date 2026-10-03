@@ -9,6 +9,8 @@ typedef enum {
     QIN_ART_REWARD,
     QIN_ART_GUARDIAN,
     QIN_ART_COVER,
+    QIN_ART_GATE,
+    QIN_ART_POEM,
     QIN_ART_COUNT
 } qin_art_id_t;
 
