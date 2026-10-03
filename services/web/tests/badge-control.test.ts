@@ -167,6 +167,23 @@ test("实时封面、拼接与通关页面不会自行生成认证完成记录",
   link.view = {...live, screen: "result", placed_mask: 7, completed: true, collected: true};
   assert.equal((await control.runtime())?.screen, "result");
   assert.equal((await api.progress(badge.badge_id)).completed, false);
+  link.view = {v: 2, device_id: badge.device_id, session_id: "demo-001", game_id: "gate_search",
+    unlocked: false, completed: false, collected: false, exhibiting: false,
+    screen: "playing", placed_mask: 0, mistakes: 0, stage: 1, bonus_collected: 0, exhibit_game: 3};
+  const gate = await control.runtime();
+  assert.ok(gate?.v === 2);
+  assert.equal(gate.game_id, "gate_search");
+  assert.equal(gate.stage, 1);
+  link.view = {...link.view, game_id: "poem_completion", screen: "result", stage: 2,
+    bonus_collected: 3, exhibit_game: 2};
+  const poem = await control.runtime();
+  assert.ok(poem?.v === 2);
+  assert.equal(poem.bonus_collected, 3);
+  assert.equal((await api.progress(badge.badge_id)).completed, false);
+  assert.equal((await api.progress(badge.badge_id)).collected, false);
+  assert.equal(badgeRuntimeSchema.safeParse({...link.view, stage: 3}).success, false);
+  assert.equal(badgeRuntimeSchema.safeParse({...link.view, bonus_collected: 0}).success, false);
+  assert.equal(badgeRuntimeSchema.safeParse({...link.view, game_id: "unknown"}).success, false);
   link.flags = 7;
   assert.equal((await control.sync()).completed, true);
   control.close();

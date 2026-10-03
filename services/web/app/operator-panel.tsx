@@ -18,8 +18,13 @@ import SyncRounded from "@mui/icons-material/SyncRounded";
 
 const siteNames = { A: "秦俑工坊", B: "长安城门", C: "诗意庭院" };
 type Tab = "explore" | "collection" | "route";
-const screenNames = {cover: "入口封面", selection: "选择游戏", intro: "准备开始", playing: "正在拼接",
-  result: "拼接完成", collection: "查看收藏", exhibit: "展示收藏", settings: "调整设置"};
+const screenNames = {cover: "入口封面", selection: "选择游戏", intro: "准备开始", playing: "正在游玩",
+  result: "通关成功", collection: "查看收藏", exhibit: "展示收藏", settings: "调整设置"};
+const games = {
+  qin_formation: {name: "秦俑归阵", reward: "秦俑守护", image: "/xks/images/qin-guardian-v3.webp", total: 3},
+  gate_search: {name: "城门寻宝", reward: "长安城门", image: "/xks/images/gate-game-v1.webp", total: 3},
+  poem_completion: {name: "诗句补全", reward: "诗意长安", image: "/xks/images/poem-game-v1.webp", total: 2},
+};
 export default function OperatorPanel() {
   const [badges, setBadges] = useState<Badge[]>([]);
   const [visits, setVisits] = useState<Visit[]>([]);
@@ -66,7 +71,7 @@ export default function OperatorPanel() {
         const live = await session.runtime();
         if (stopped || current !== generation.current) return;
         setRuntime(live);
-        // 只有签名认证回读才能更新完成／收藏，不使用实时消息直接点亮进度。
+        // 秦俑认证进度只由签名回读更新；新增游戏独立显示本地实时收藏。
         if (++polls % 3 === 0 || live?.screen === "result") {
           const verified = await session.sync();
           if (!stopped && current === generation.current) setProgress(verified);
@@ -113,8 +118,24 @@ export default function OperatorPanel() {
     try { await action(); } catch (error) { setNotice(error instanceof Error ? error.message : "操作未完成，请重试"); }
     finally { locked.current = false; setBusy(false); }
   }
-  const steps = [{ name: "解锁", done: progress?.unlocked, Icon: LockOpenRounded }, { name: "通关", done: progress?.completed, Icon: SportsEsportsRounded },
-    { name: "收藏", done: progress?.collected, Icon: CollectionsBookmarkRounded }, { name: "展示", done: progress?.exhibiting, Icon: ImageRounded }];
+  const activeGame = games[runtime?.game_id ?? "qin_formation"];
+  const liveStage = runtime?.v === 2 && runtime.game_id !== "qin_formation" ? runtime.stage :
+    [0, 1, 2].filter(bit => ((runtime?.placed_mask ?? 0) & (1 << bit)) !== 0).length;
+  const rewards = [
+    {id: "qin_formation" as const, collected: !!progress?.collected, index: 0},
+    {id: "gate_search" as const, collected: runtime?.v === 2 && (runtime.bonus_collected & 1) !== 0, index: 1},
+    {id: "poem_completion" as const, collected: runtime?.v === 2 && (runtime.bonus_collected & 2) !== 0, index: 2},
+  ];
+  const rewardCount = rewards.filter(item => item.collected).length;
+  const shownReward = runtime?.v === 2 && runtime.exhibit_game < 3 ? rewards[runtime.exhibit_game] : undefined;
+  const localGame = runtime?.v === 2 && runtime.game_id !== "qin_formation" ?
+    rewards[runtime.game_id === "gate_search" ? 1 : 2] : undefined;
+  const steps = localGame ? [
+    {name: "游玩", done: liveStage > 0 || localGame.collected || runtime?.screen === "playing", Icon: SportsEsportsRounded},
+    {name: "收藏", done: localGame.collected, Icon: CollectionsBookmarkRounded},
+    {name: "展示", done: runtime?.v === 2 && runtime.exhibit_game === localGame.index, Icon: ImageRounded},
+  ] : [{ name: "解锁", done: progress?.unlocked, Icon: LockOpenRounded }, { name: "通关", done: progress?.completed, Icon: SportsEsportsRounded },
+    { name: "收藏", done: progress?.collected, Icon: CollectionsBookmarkRounded }, { name: "展示", done: runtime?.v === 2 ? runtime.exhibit_game === 0 : progress?.exhibiting, Icon: ImageRounded }];
   return <main className={`visitor-app${runtime?.screen ? " has-runtime" : ""}`}>
     <header className="visitor-header"><h1>长安游迹</h1>
       <Image src="/xks/images/changan-gate-v3.webp" width={780} height={260} alt="云山间的长安城门" priority className="visitor-landscape" />
@@ -127,14 +148,14 @@ export default function OperatorPanel() {
         {badges.filter(item => /^esp32s3-[0-9a-f]{12}$/.test(item.device_id)).map(item => <option key={item.badge_id} value={item.badge_id}>{item.display_number} 号</option>)}
       </select><button className="visitor-primary" disabled={busy || !badge || !online || !!unsupported}
         onClick={() => void operate(connected ? () => sync() : connect)}>{connected ? <SyncRounded fontSize="small" /> : <BluetoothRounded fontSize="small" />}{busy ? "处理中…" : connected ? "同步进度" : "连接腰牌"}</button></div>
-      <ol className="visitor-steps">{steps.map(step => <li key={step.name}>
+      <ol className="visitor-steps" style={{gridTemplateColumns: `repeat(${steps.length}, 1fr)`}} aria-label={`${activeGame.name}进度`}>{steps.map(step => <li key={step.name}>
         <span className={`visitor-step-icon ${step.done ? "is-complete" : ""}`} role="img" aria-label={`${step.name}${step.done ? "已完成" : "未确认"}`}><step.Icon />{step.done && <CheckCircleRounded className="visitor-step-check" />}</span><span>{step.name}</span>
       </li>)}</ol>
       {runtime?.screen && <div className="visitor-runtime" aria-live="polite">
-        <Image src={runtime.screen === "cover" ? "/xks/images/journey-cover-v1.webp" : "/xks/images/qin-guardian-v3.webp"}
+        <Image src={runtime.screen === "cover" ? "/xks/images/journey-cover-v1.webp" : activeGame.image}
           width={48} height={48} alt="" />
-        <div><strong>{runtime.screen === "cover" || runtime.screen === "selection" ? "长安游迹" : "秦俑归阵"}</strong>
-          <span>{screenNames[runtime.screen]}{runtime.screen === "playing" ? ` · ${[0, 1, 2].filter(bit => ((runtime.placed_mask ?? 0) & (1 << bit)) !== 0).length}/3` : ""}</span></div>
+        <div><strong>{runtime.screen === "cover" ? "长安游迹" : activeGame.name}</strong>
+          <span>{screenNames[runtime.screen]}{runtime.screen === "playing" ? ` · ${liveStage}/${activeGame.total}` : ""}</span></div>
         <span className="visitor-live-label">实时</span>
       </div>}
       {connected && !progress?.unlocked && latestVisit?.site_id === "A" && <button className="visitor-primary visitor-unlock" disabled={busy || !online}
@@ -143,14 +164,18 @@ export default function OperatorPanel() {
     </section>
     {tab === "explore" && <div className="visitor-feature-grid">
       <button className="visitor-feature visitor-collection" onClick={() => setTab("collection")}><h2>我的收藏</h2>
-        <Image src="/xks/images/qin-guardian-v3.webp" width={240} height={240} alt="秦俑守护收藏" />
-        <span>{progress?.collected ? "秦俑守护" : progress ? "通关后获得" : "连接后查看"}</span></button>
+        <Image src={shownReward ? games[shownReward.id].image : games.qin_formation.image} width={240} height={240} alt="游戏收藏" />
+        <span>{rewardCount ? `已收藏 ${rewardCount} / 3` : progress ? "通关后获得" : "连接后查看"}</span></button>
       <VisitorRecommendation key={latestVisit?.event_id ?? badgeId} visit={latestVisit} disabled={!online || busy || !badge} />
     </div>}
     {tab === "collection" && <section className="visitor-subpage"><h2>我的收藏</h2>
-      <Image src="/xks/images/qin-guardian-v3.webp" width={240} height={240} alt="秦俑守护" />
-      <h3>{progress?.collected ? "秦俑守护" : progress ? "完成秦俑归阵即可收藏" : "连接腰牌，查看你的收藏"}</h3>
-      {progress?.collected && <p>{progress.exhibiting ? "正在腰牌上展示" : "可在腰牌上设为展示"}</p>}
+      {!connected && <p>连接腰牌，查看你的收藏</p>}
+      <div className="visitor-rewards">{rewards.map(item => <article key={item.id} className={item.collected ? "is-collected" : ""}>
+        <Image src={games[item.id].image} width={96} height={96} alt={games[item.id].reward} />
+        <div><h3>{games[item.id].reward}</h3><p>{item.collected ?
+          (runtime?.v === 2 ? runtime.exhibit_game === item.index : item.index === 0 && progress?.exhibiting)
+            ? "腰牌展示中" : item.index ? "本地收藏" : "已收藏" : connected ? "通关后获得" : "连接后查看"}</p></div>
+      </article>)}</div>
     </section>}
     {tab === "route" && <section className="visitor-route"><h2>探索路线</h2>
       <Image src="/xks/images/changan-gate-v3.webp" width={780} height={260} alt="长安文化探索" />

@@ -34,7 +34,7 @@ export type DeviceState = z.infer<typeof stateSchema>;
 export type Envelope = z.infer<typeof envelopeSchema>;
 
 // 蓝牙实时界面信息与后台签名认证进度分开，不参与统计和模型输入。
-export const badgeRuntimeSchema = z.strictObject({
+const legacyBadgeRuntimeSchema = z.strictObject({
   v: z.literal(1), device_id: z.string().regex(/^esp32s3-[0-9a-f]{12}$/),
   session_id: z.literal("demo-001"), game_id: z.literal("qin_formation"),
   unlocked: z.boolean(), completed: z.boolean(), collected: z.boolean(), exhibiting: z.boolean(),
@@ -46,6 +46,23 @@ export const badgeRuntimeSchema = z.strictObject({
   && ((value.screen === undefined && value.placed_mask === undefined && value.mistakes === undefined)
     || (value.screen !== undefined && value.placed_mask !== undefined && value.mistakes !== undefined)),
 "设备实时界面信息不完整或违反进度约束");
+const multiGameRuntimeSchema = z.strictObject({
+  v: z.literal(2), device_id: z.string().regex(/^esp32s3-[0-9a-f]{12}$/),
+  session_id: z.literal("demo-001"), game_id: z.enum(["qin_formation", "gate_search", "poem_completion"]),
+  // 四个标志仍专属秦俑签名进度；新增本地游戏使用独立字段。
+  unlocked: z.boolean(), completed: z.boolean(), collected: z.boolean(), exhibiting: z.boolean(),
+  screen: z.enum(["cover", "selection", "intro", "playing", "result", "collection", "exhibit", "settings"]),
+  placed_mask: z.number().int().min(0).max(7), mistakes: z.number().int().min(0).max(255),
+  stage: z.number().int().min(0).max(3), bonus_collected: z.number().int().min(0).max(3),
+  exhibit_game: z.number().int().min(0).max(3),
+}).refine(value => value.completed === value.collected && (!value.completed || value.unlocked)
+  && (!value.exhibiting || value.collected)
+  && (value.game_id === "qin_formation" ? value.stage === 0 :
+    value.stage <= (value.game_id === "gate_search" ? 3 : 2))
+  && (value.exhibit_game === 3 || (value.exhibit_game === 0 ? value.collected :
+    (value.bonus_collected & (1 << (value.exhibit_game - 1))) !== 0)),
+"多游戏实时信息不满足进度或展示约束");
+export const badgeRuntimeSchema = z.union([legacyBadgeRuntimeSchema, multiGameRuntimeSchema]);
 export type BadgeRuntime = z.infer<typeof badgeRuntimeSchema>;
 
 export const sourceSchema = z.enum(["physical_scan_simulated_site", "generated_simulation", "interface_test"]);
