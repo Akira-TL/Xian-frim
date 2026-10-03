@@ -131,6 +131,35 @@ class Repository:
             row = existing or db.execute("SELECT * FROM visits WHERE event_id = ?", (visit_id,)).fetchone()
             return self.scan_response(self.visit(row), existing is not None)
 
+    def prepare_demo(self, batch_id: str, now: datetime) -> list[Visit]:
+        # 独立虚拟腰牌和生成来源；不改终端配置、认证进度或解锁请求。
+        generated: list[Visit] = []
+        with self.connection(write=True) as db:
+            for site, count in (("A", 6), ("B", 3), ("C", 1)):
+                for number in range(1, count + 1):
+                    badge_id = f"demo-map-{site}-{number}"
+                    device_id = f"virtual-map-{site}-{number}"
+                    display = f"虚拟{site}{number}"
+                    badge = db.execute("SELECT * FROM badges WHERE badge_id=?", (badge_id,)).fetchone()
+                    if badge and (badge["device_id"], badge["display_number"]) != (device_id, display):
+                        raise BusinessError(409, "演示专用编号已被其他登记占用，不覆盖")
+                    try:
+                        db.execute("INSERT OR IGNORE INTO badges VALUES (?, ?, ?)",
+                                   (badge_id, display, device_id))
+                        event_id = f"demo-{batch_id}-{site}-{number}"
+                        db.execute("INSERT OR IGNORE INTO visits VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                   (event_id, "demo-001", badge_id, "demo-generator-001", site, 1,
+                                    now.isoformat(), now.isoformat(), "synced", Source.GENERATED, now.timestamp()))
+                    except sqlite3.IntegrityError as error:
+                        raise BusinessError(409, "演示专用身份已被占用，不覆盖") from error
+                    row = db.execute("SELECT * FROM visits WHERE event_id=?", (event_id,)).fetchone()
+                    if (row["badge_id"] != badge_id or row["source"] != Source.GENERATED or row["site_id"] != site
+                            or row["terminal_id"] != "demo-generator-001" or row["session_id"] != "demo-001"
+                            or row["time_quality"] != "synced" or row["config_version"] != 1):
+                        raise BusinessError(409, "演示事件编号已被其他记录占用，不覆盖")
+                    generated.append(self.visit(row))
+        return generated
+
     def visits(self) -> list[Visit]:
         with self.connection() as db:
             return [self.visit(row) for row in db.execute("SELECT * FROM visits ORDER BY received_at DESC, event_id")]

@@ -4,7 +4,7 @@ import { activitySchema, badgeSchema, commandSchema, envelopeSchema, stateSchema
 type UnlockRequest = { command_id: string; event_id: string; badge_id: string; device_id: string };
 type InterfaceTestVisit = { event_id: string; session_id: "demo-001"; badge_id: string; terminal_id: "interface-test-001";
   site_id: "A"; config_version: 1; captured_at: string; time_quality: "untrusted" };
-type RequestBody = Badge | UnlockRequest | ScenarioRequest | RecommendationRequest | InterfaceTestVisit | { nonce: string } | { device_id: string } | { challenge: string; payload_hex: string };
+type RequestBody = Badge | UnlockRequest | ScenarioRequest | RecommendationRequest | InterfaceTestVisit | { batch_id: string } | { nonce: string } | { device_id: string } | { challenge: string; payload_hex: string };
 
 export function createApi(base = "/xks/api/v1") {
   async function request<T>(path: string, schema: z.ZodType<T>, body?: RequestBody, method = body === undefined ? "GET" : "POST"): Promise<T> {
@@ -23,6 +23,7 @@ export function createApi(base = "/xks/api/v1") {
   }
   const badgePath = (badge: string) => `badges/${encodeURIComponent(badge)}`;
   return {
+    prepareDemo: (batch_id: string) => request("demo/prepare", z.array(visitSchema), { batch_id }),
     recommend: (input: RecommendationRequest) => request("recommendations", recommendationSchema, input),
     recommendationRecord: (snapshot: string) => request(`recommendations/${encodeURIComponent(snapshot)}`, recommendationRecordSchema),
     sites: () => request("sites", siteCatalogSchema),

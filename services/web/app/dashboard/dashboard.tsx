@@ -28,6 +28,26 @@ export default function Dashboard() {
   const [notice, setNotice] = useState("正在读取看板数据");
   const [offline, setOffline] = useState(true);
   const [refresh, setRefresh] = useState(0);
+  const [preparing, setPreparing] = useState(false);
+  const [preparationNotice, setPreparationNotice] = useState("");
+  const [batchId, setBatchId] = useState<string>();
+  async function prepareDemo() {
+    if (preparing) return;
+    setPreparing(true);
+    const id = batchId ?? crypto.randomUUID();
+    setBatchId(id);
+    try {
+      const visits = await api.prepareDemo(id);
+      if (visits.length !== 10 || visits.some(visit => visit.source !== "generated_simulation")) {
+        throw new Error("演示响应来源或数量不匹配，不能展示为成功");
+      }
+      setBatchId(undefined);
+      setSource("generated_simulation"); setRefresh(value => value + 1);
+      setPreparationNotice("已准备10条生成模拟记录；请选择虚拟A1的最新到访，再手动生成建议。数据90秒后过期，可再次准备；不控制实物、不自动调用模型。");
+    } catch (error) {
+      setPreparationNotice(error instanceof Error ? `${error.message}；再次点击沿用同一批次重试，不重复创建` : "准备失败，结果未确认");
+    } finally { setPreparing(false); }
+  }
   useEffect(() => {
     let active = true;
     let pending = false;
@@ -74,8 +94,11 @@ export default function Dashboard() {
           <option value="interface_test">接口联调测试 · 不计真实到访</option>
         </select></label>
         <button className="rounded-lg bg-stone-800 px-4 py-2 text-white" onClick={() => setRefresh(value => value + 1)}>刷新</button>
+        <button className="rounded-lg border border-amber-500 px-4 py-2 disabled:opacity-50" disabled={preparing}
+          onClick={() => { void prepareDemo(); }}>{preparing ? "正在准备模拟数据" : "生成演示数据（非真实到访）"}</button>
       </div>
     </header>
+    {preparationNotice && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{preparationNotice}</p>}
     <div role="status" aria-live="polite" className={`rounded-xl p-3 ${offline ? "bg-amber-100" : "bg-stone-100"}`}>
       {notice}{offline && current ? "；以下为上次成功读取的旧快照，不代表当前情况" : ""}
       {map && <span className="ml-3">快照时间：{time(map.generated_at)}</span>}

@@ -27,6 +27,10 @@ class BadgeRegistration(Contract):
     device_id: Identifier
 
 
+class DemoPreparation(Contract):
+    batch_id: Identifier
+
+
 class ScanRequest(Contract):
     event_id: CommandId
     session_id: Literal["demo-001"]
