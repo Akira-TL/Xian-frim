@@ -70,6 +70,25 @@ test("免登录流程只在后台验证实际设备回执后确认解锁", async
   assert.equal(commands.find(command => command.event_id === visit.event_id)?.status, "confirmed");
 });
 
+test("公开网页的专用接口测试记录沿用身份核对和真实回执认证流程", async () => {
+  const { badge, link } = await fixture();
+  const response = await fetch(`${web}/api/v1/interface-test/visits`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ event_id: `interface-web-${sequence}`, session_id: "demo-001", badge_id: badge.badge_id,
+      terminal_id: "interface-test-001", site_id: "A", config_version: 1,
+      captured_at: new Date().toISOString(), time_quality: "untrusted" }),
+  });
+  assert.equal(response.status, 200);
+  const visits = await api.visits();
+  const visit = visits.find(item => item.event_id === `interface-web-${sequence}`);
+  assert.ok(visit);
+  assert.equal(visit.source, "interface_test");
+  const control = new BadgeControl(badge, link, api);
+  await control.sync();
+  assert.equal((await control.unlock(visit)).unlocked, true);
+  assert.equal((await api.commands()).find(item => item.event_id === visit.event_id)?.status, "confirmed");
+});
+
 test("连接身份不匹配时不会向该设备写入任何消息", async () => {
   const { badge, link } = await fixture();
   link.deviceId = "esp32s3-aabbccddeeff";

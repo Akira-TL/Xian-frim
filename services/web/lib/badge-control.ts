@@ -85,9 +85,9 @@ export class BadgeControl {
   async unlock(visit: Visit): Promise<DeviceState> {
     return this.run(async () => {
       if (!this.synced) throw new Error("请先认证同步当前设备进度");
-      if (visit.source !== "physical_scan_simulated_site" || visit.site_id !== "A"
+      if (!(visit.source === "physical_scan_simulated_site" || visit.source === "interface_test") || visit.site_id !== "A"
           || visit.session_id !== "demo-001" || visit.badge_id !== this.badge.badge_id) {
-        throw new Error("必须选择当前腰牌在 A 点的实物到访");
+        throw new Error("必须选择当前腰牌在 A 点的实物到访或接口测试记录");
       }
       if (await this.step(() => this.link.identity()) !== this.badge.device_id) throw new Error("实物身份与登记不一致，禁止发送");
       this.onPhase("authorizing");

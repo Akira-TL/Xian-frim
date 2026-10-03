@@ -2,7 +2,9 @@ import { z } from "zod";
 import { activitySchema, badgeSchema, commandSchema, envelopeSchema, stateSchema, visitSchema, scenarioSchema, siteCatalogSchema, recommendationSchema, recommendationRecordSchema, type Badge, type DataSource, type ScenarioRequest, type RecommendationRequest } from "./contracts.ts";
 
 type UnlockRequest = { command_id: string; event_id: string; badge_id: string; device_id: string };
-type RequestBody = Badge | UnlockRequest | ScenarioRequest | RecommendationRequest | { nonce: string } | { device_id: string } | { challenge: string; payload_hex: string };
+type InterfaceTestVisit = { event_id: string; session_id: "demo-001"; badge_id: string; terminal_id: "interface-test-001";
+  site_id: "A"; config_version: 1; captured_at: string; time_quality: "untrusted" };
+type RequestBody = Badge | UnlockRequest | ScenarioRequest | RecommendationRequest | InterfaceTestVisit | { nonce: string } | { device_id: string } | { challenge: string; payload_hex: string };
 
 export function createApi(base = "/xks/api/v1") {
   async function request<T>(path: string, schema: z.ZodType<T>, body?: RequestBody, method = body === undefined ? "GET" : "POST"): Promise<T> {
@@ -28,6 +30,10 @@ export function createApi(base = "/xks/api/v1") {
     activity: (source: DataSource) => request(`activity?source=${encodeURIComponent(source)}`, activitySchema),
     badges: () => request("badges", z.array(badgeSchema)),
     visits: () => request("visits", z.array(visitSchema)),
+    testVisit: (badge: string) => request("interface-test/visits", z.strictObject({
+      visit: visitSchema, duplicate: z.boolean(), can_unlock: z.boolean(),
+    }), { event_id: crypto.randomUUID(), session_id: "demo-001", badge_id: badge, terminal_id: "interface-test-001",
+      site_id: "A", config_version: 1, captured_at: new Date().toISOString(), time_quality: "untrusted" }),
     commands: () => request("unlock-commands", z.array(commandSchema)),
     register: (badge: Badge) => request("badges", badgeSchema, badge),
     createUnlock: (input: UnlockRequest) => request("unlock-commands", commandSchema, input),

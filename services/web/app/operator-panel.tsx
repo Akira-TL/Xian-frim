@@ -9,6 +9,8 @@ import RecommendationPanel from "./recommendation-panel";
 
 const siteNames = { A: "秦俑工坊", B: "长安城门", C: "诗意庭院" };
 const commandNames = { pending: "待发送", sent: "已发送，执行未确认", confirmed: "设备已确认执行", unknown: "结果未确认", failed: "请求失败" };
+const sourceNames = { physical_scan_simulated_site: "实物扫码 · 模拟地点", generated_simulation: "生成模拟 · 不可控制实物",
+  interface_test: "接口联调测试 · 不计真实到访" };
 const buttonStyle = "rounded-xl bg-stone-800 px-4 py-3 text-white disabled:opacity-40";
 const phaseNames: Record<ControlPhase, string> = {
   checking: "核对实物身份", authorizing: "取得后台授权", sending: "向设备写入请求",
@@ -67,7 +69,7 @@ export default function OperatorPanel() {
   async function deviceOperation(unlock: boolean) {
     const session = control.current;
     if (!session || !selectedBadge || connection?.badgeId !== selectedBadge.badge_id) throw new Error("请先连接对应腰牌");
-    if (unlock && !selected) throw new Error("解锁必须选择实物到访");
+    if (unlock && !selected) throw new Error("解锁必须选择实物到访或接口测试记录");
     const current = generation.current;
     try {
       const state = await (unlock && selected ? session.unlock(selected) : session.sync());
@@ -98,7 +100,7 @@ export default function OperatorPanel() {
   useEffect(() => {
     let active = true;
     setUnsupported(bluetoothSupport());
-    void refresh().then(() => { if (active) setNotice("演示免登录；可先选择腰牌读取进度，解锁仍须实物到访"); })
+    void refresh().then(() => { if (active) setNotice("演示免登录；选择腰牌核对进度，测试打卡后可联调解锁"); })
       .catch(() => { if (active) { setOnline(false); setNotice("后台暂不可达，当前没有在线记录"); } });
     return () => { active = false; generation.current += 1; control.current?.close(); control.current = undefined; };
   }, [refresh]);
@@ -119,6 +121,7 @@ export default function OperatorPanel() {
     <section className="mb-6 rounded-2xl bg-white p-5" aria-label="腰牌连接与进度">
       <h2 className="text-xl font-semibold">腰牌连接与进度</h2>
       <p className="my-3 text-sm text-stone-600">无需到访即可核对已登记腰牌、读取认证进度；连接和查询不会解锁游戏。</p>
+      <p className="mb-3 text-sm text-amber-800">演示联调可创建 A 点测试记录，不代表真实扫码，也不计真实到访统计。</p>
       <label className="block text-sm">选择已登记腰牌
         <select aria-label="选择已登记腰牌" className="my-3 w-full rounded-lg border p-3"
           value={selectedBadge?.badge_id ?? ""} disabled={busy || !online}
@@ -128,6 +131,13 @@ export default function OperatorPanel() {
         </select>
       </label>
       <div className="flex flex-wrap gap-3">
+        <button className={buttonStyle} disabled={busy || !online || !selectedBadge}
+          onClick={() => void operate(async () => {
+            if (!selectedBadge) throw new Error("请先选择腰牌");
+            const result = await api.testVisit(selectedBadge.badge_id);
+            await refresh(); setSelection(result.visit.event_id);
+            setNotice("已创建 A 点接口测试记录，不计真实到访；连接核对身份后可解锁游戏");
+          })}>测试打卡（A 点）</button>
         <button className={buttonStyle} disabled={busy || !!unsupported || !selectedBadge || !online}
           onClick={() => void operate(connect)}>连接并核对身份</button>
         <button className={buttonStyle} disabled={busy || !connection}
@@ -144,7 +154,7 @@ export default function OperatorPanel() {
     </section>
     <div className="grid gap-5 md:grid-cols-2">
       <section className="rounded-2xl bg-white p-5"><h2 className="text-xl font-semibold">到访记录</h2>
-        <p className="my-3 text-sm text-stone-600">实物扫码与模拟记录分别标注；只有 A 点实物到访可以解锁。</p>
+        <p className="my-3 text-sm text-stone-600">真实扫码、接口测试与生成模拟分别标注；A 点实物到访或接口测试可解锁，生成模拟不可控制设备。</p>
         {!visits.length && <p className="py-8 text-stone-500">暂无到访。等待景区终端按接口上报。</p>}
         <ul className="space-y-3">{visits.map(visit => {
           const badge = badges.find(item => item.badge_id === visit.badge_id);
@@ -153,7 +163,7 @@ export default function OperatorPanel() {
             onClick={() => { if (!locked.current && selection !== visit.event_id) { disconnect(); setSelection(visit.event_id); } }}
             className={`w-full rounded-xl border p-4 text-left ${selection === visit.event_id ? "border-stone-800 bg-stone-100" : "border-stone-200"}`}>
             <span className="font-semibold">{badge?.display_number ?? visit.badge_id} 号 · {siteNames[visit.site_id]}</span>
-            <span className="mt-2 block text-sm">{visit.source === "physical_scan_simulated_site" ? "实物扫码 · 模拟地点" : "生成模拟 · 不可控制实物"}</span>
+            <span className="mt-2 block text-sm">{sourceNames[visit.source]}</span>
             <span className="mt-1 block text-sm text-stone-600">{time(visit.captured_at)}{visit.time_quality === "untrusted" ? " · 时间未校准" : ""}</span>
             <span className="mt-1 block text-sm">{command ? commandNames[command.status] : "尚未创建解锁请求"}</span>
           </button></li>;
@@ -168,12 +178,13 @@ export default function OperatorPanel() {
           {selectedCommand && <p className="text-sm">请求有效期至 {time(selectedCommand.expires_at)}；过期后先查询状态，未解锁则需新的实物到访。</p>}
           <div className="flex flex-wrap gap-3 pt-2">
             <button className={buttonStyle} disabled={busy || !online || !control.current?.ready
-              || connection?.badgeId !== selected.badge_id || selected.source !== "physical_scan_simulated_site"
+              || connection?.badgeId !== selected.badge_id || selected.source === "generated_simulation"
               || selected.site_id !== "A" || !!progress?.unlocked
               || !!(selectedCommand && Date.parse(selectedCommand.expires_at) <= Date.now())}
               onClick={() => void operate(() => deviceOperation(true))}>解锁本点游戏</button>
           </div>
-          {selected.source !== "physical_scan_simulated_site" && <p className="text-sm text-amber-800">生成模拟只供查看，禁止控制实物腰牌。</p>}
+          {selected.source === "generated_simulation" && <p className="text-sm text-amber-800">生成模拟只供查看，禁止控制实物腰牌。</p>}
+          {selected.source === "interface_test" && <p className="text-sm text-amber-800">接口联调测试，不代表真实扫码。解锁仍需实物身份核对及认证回执。</p>}
           {selected.site_id !== "A" && <p className="text-sm text-stone-600">当前仅实现 A 点《秦俑归阵》。</p>}
           <RecommendationPanel key={selected.event_id} visit={selected} disabled={busy || !online} />
         </div> : <p className="mt-8 text-stone-500">选择左侧一条记录以核对腰牌。</p>}

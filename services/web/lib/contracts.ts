@@ -6,11 +6,13 @@ const date = z.iso.datetime({ offset: true });
 export const badgeSchema = z.strictObject({ badge_id: id, display_number: z.string().min(1).max(12), device_id: id });
 export const visitSchema = z.strictObject({
   event_id: commandId, session_id: z.literal("demo-001"), badge_id: id,
-  terminal_id: z.literal("k230-001"), site_id: z.enum(["A", "B", "C"]),
+  terminal_id: z.enum(["k230-001", "interface-test-001"]), site_id: z.enum(["A", "B", "C"]),
   config_version: z.number().int().positive(), captured_at: date, received_at: date,
   time_quality: z.enum(["synced", "untrusted"]),
-  source: z.enum(["physical_scan_simulated_site", "generated_simulation"]),
-});
+  source: z.enum(["physical_scan_simulated_site", "generated_simulation", "interface_test"]),
+}).refine(value => value.source === "interface_test"
+  ? value.terminal_id === "interface-test-001" && value.site_id === "A" && value.config_version === 1
+  : value.terminal_id === "k230-001", "记录来源与终端身份不一致");
 export const commandSchema = z.strictObject({
   command_id: commandId, event_id: commandId, session_id: z.literal("demo-001"),
   badge_id: id, device_id: id, game_id: z.literal("qin_formation"),
@@ -30,7 +32,7 @@ export type Command = z.infer<typeof commandSchema>;
 export type DeviceState = z.infer<typeof stateSchema>;
 export type Envelope = z.infer<typeof envelopeSchema>;
 
-export const sourceSchema = z.enum(["physical_scan_simulated_site", "generated_simulation"]);
+export const sourceSchema = z.enum(["physical_scan_simulated_site", "generated_simulation", "interface_test"]);
 const siteId = z.enum(["A", "B", "C"]);
 const count = z.number().int().nonnegative();
 const heatThresholdsSchema = z.strictObject({
@@ -60,7 +62,7 @@ const progressSummarySchema = z.strictObject({
   && value.collected_badges === value.completed_badges && value.exhibiting_badges <= value.collected_badges,
 "认证计数不满足游戏进度约束");
 export const activitySchema = z.strictObject({ map: mapSchema, progress: progressSummarySchema.nullable() })
-  .refine(value => (value.map.source === "generated_simulation") === (value.progress === null),
+  .refine(value => (value.map.source !== "physical_scan_simulated_site") === (value.progress === null),
     "模拟来源不能包含实物游戏进度");
 export type ActivitySnapshot = z.infer<typeof activitySchema>;
 export type DataSource = z.infer<typeof sourceSchema>;

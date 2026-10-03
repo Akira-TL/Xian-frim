@@ -71,6 +71,7 @@ export default function Dashboard() {
           onChange={event => setSource(sourceSchema.parse(event.target.value))}>
           <option value="physical_scan_simulated_site">实物扫码接口 · 模拟地点</option>
           <option value="generated_simulation">生成模拟数据</option>
+          <option value="interface_test">接口联调测试 · 不计真实到访</option>
         </select></label>
         <button className="rounded-lg bg-stone-800 px-4 py-2 text-white" onClick={() => setRefresh(value => value + 1)}>刷新</button>
       </div>
