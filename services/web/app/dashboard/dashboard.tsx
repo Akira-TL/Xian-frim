@@ -90,6 +90,7 @@ export default function Dashboard() {
   const current = snapshot?.map.source === source ? snapshot : undefined;
   const map = current?.map;
   const progress = current?.progress;
+  const visits = current?.visits;
   const windows = map?.trend.filter(point => point.site_id === "A") ?? [];
   const completedRate = progress && progress.unlocked_badges > 0
     ? `${(100 * progress.completed_badges / progress.unlocked_badges).toFixed(1)}%` : "暂无可计算数据";
@@ -118,6 +119,17 @@ export default function Dashboard() {
       {map && <span className="ml-3">快照时间：{time(map.generated_at)}</span>}
     </div>
     {!map ? <p className={panel}>暂无所选来源的快照；不会填充虚构数值。</p> : <>
+      {visits && <section className={panel} aria-label="当前活动到访汇总">
+        <h2 className="text-xl font-semibold">当前活动到访汇总</h2>
+        <p className="mt-1 text-sm text-stone-600">固定会话 demo-001，自首条有效记录至快照时间；仅统计上方所选来源，不是全景区游客人数。合并短时重复扫码，只纳入时间可靠且不晚于快照的到访。</p>
+        <dl className="mt-4 grid gap-4 md:grid-cols-3">
+          <div><dt className="text-sm text-stone-600">累计有效到访</dt><dd className="text-3xl font-semibold">{visits.total_visits} 次</dd></div>
+          <div><dt className="text-sm text-stone-600">活动参与腰牌</dt><dd className="text-3xl font-semibold">{visits.participating_badges} 枚</dd></div>
+          <div><dt className="text-sm text-stone-600">平均扫码间隔</dt><dd className="text-3xl font-semibold">{visits.average_scan_interval_seconds === null ? "暂无样本" : `${visits.average_scan_interval_seconds.toFixed(1)} 秒`}</dd></div>
+        </dl>
+        <p className="mt-4">节点累计到访：{visits.sites.map(site => `${site.site_id} ${siteNames[site.site_id]} ${site.visits} 次`).join("；")}</p>
+        <p className="mt-2 text-sm text-stone-600">间隔样本 {visits.interval_samples} 对，比较同一腰牌相邻时间可靠的有效到访，含同节点再次到访；不是实际停留时长。排除时间不可靠 {visits.excluded_untrusted_events} 条、未来时间 {visits.excluded_future_events} 条。</p>
+      </section>}
       <section className={panel}>
         <h2 className="text-xl font-semibold">节点示意与近期热度</h2>
         <p className="mt-1 text-sm text-stone-600">最近五分钟的不同腰牌数；节点示意不代表真实地理坐标。演示阈值：低 0—{map.heat_thresholds.medium_min - 1}、中 {map.heat_thresholds.medium_min}—{map.heat_thresholds.high_min - 1}、高 {map.heat_thresholds.high_min} 及以上；不代表场地安全容量。超过九十秒未更新或时间不可靠显示数据不足。</p>

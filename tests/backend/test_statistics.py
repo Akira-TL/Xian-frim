@@ -7,6 +7,8 @@ from changan.models import ActivitySnapshot, MapSnapshot, SiteSelection, Termina
 from changan.api import create_app
 from changan.catalog import SiteCatalog, default_catalog
 from changan.recommendations import RecommendationRecord, RecommendationResult
+from changan.statistics import summarize_visits
+from changan.models import Source, Visit
 from test_recommendations import refresh_site
 from test_visits import client, operator, post_scan, register, scan, terminal, NOW
 
@@ -15,6 +17,56 @@ def snapshot(client: TestClient, source: str = "physical_scan_simulated_site") -
     response = client.get("/api/v1/map?source=" + source, headers=terminal())
     assert response.status_code == 200, response.text
     return MapSnapshot.model_validate_json(response.text)
+
+
+def test_activity_totals_use_deduplicated_visits_and_same_badge_intervals(client: TestClient) -> None:
+    register(client)
+    register(client, "badge-002", "esp32-other")
+    post_scan(client, scan("first", -500))
+    post_scan(client, scan("retry", -480))  # 同一地点短时重扫不会新增有效到访。
+    post_scan(client, scan("second", -300))
+    post_scan(client, scan("third", -100))
+    post_scan(client, scan("other", -20).model_copy(update={"badge_id": "badge-002"}))
+    post_scan(client, scan("simulated", -10), "/api/v1/demo/visits")
+    response = client.get("/api/v1/activity", headers=operator())
+    assert response.status_code == 200
+    summary = ActivitySnapshot.model_validate_json(response.text).visits
+    assert summary.total_visits == 4 and summary.participating_badges == 2
+    assert [site.visits for site in summary.sites] == [4, 0, 0]
+    assert summary.interval_samples == 2 and summary.average_scan_interval_seconds == 200
+    generated = client.get("/api/v1/activity?source=generated_simulation", headers=operator())
+    simulated = ActivitySnapshot.model_validate_json(generated.text)
+    assert simulated.visits.total_visits == 1 and simulated.visits.participating_badges == 1
+    assert simulated.visits.interval_samples == 0 and simulated.visits.average_scan_interval_seconds is None
+    assert simulated.progress is None
+
+
+def test_activity_summary_excludes_other_sessions_future_and_untrusted_times() -> None:
+    def visit(event: str, seconds: int, site: str = "A", badge: str = "one", **changes: str) -> Visit:
+        return Visit.model_validate({"event_id": event, "session_id": "demo-001", "badge_id": badge,
+            "terminal_id": "k230-001", "site_id": site, "config_version": 1,
+            "captured_at": NOW + timedelta(seconds=seconds), "received_at": NOW,
+            "source": Source.PHYSICAL, "time_quality": "synced", **changes})
+    records = [visit("last", -10, "C"), visit("first", -310), visit("other", -20, "B", "two"),
+               visit("future", 10), visit("uncertain", -60, time_quality="untrusted"),
+               visit("old-session", -200, session_id="other"),
+               visit("generated", -100, source="generated_simulation")]
+    summary = summarize_visits(records, NOW, Source.PHYSICAL)
+    assert summary.total_visits == 3 and summary.participating_badges == 2
+    assert [site.visits for site in summary.sites] == [1, 1, 1]
+    assert summary.interval_samples == 1 and summary.average_scan_interval_seconds == 300
+    assert summary.excluded_untrusted_events == 1 and summary.excluded_future_events == 1
+    empty = summarize_visits([], NOW, Source.INTERFACE_TEST)
+    assert empty.total_visits == empty.participating_badges == empty.interval_samples == 0
+    assert empty.average_scan_interval_seconds is None
+
+
+def test_activity_intervals_keep_same_timestamp_as_zero_not_missing() -> None:
+    record = Visit(event_id="a", session_id="demo-001", badge_id="one", terminal_id="k230-001",
+                   site_id="A", config_version=1, captured_at=NOW, received_at=NOW,
+                   source=Source.PHYSICAL, time_quality="synced")
+    summary = summarize_visits([record, record.model_copy(update={"event_id": "b", "site_id": "B"})], NOW, Source.PHYSICAL)
+    assert summary.interval_samples == 1 and summary.average_scan_interval_seconds == 0
 
 
 def test_five_minute_unique_badges_and_previous_window_are_reproducible(client: TestClient) -> None:

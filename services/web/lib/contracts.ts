@@ -62,7 +62,17 @@ const progressSummarySchema = z.strictObject({
   && value.unlocked_badges <= value.verified_badges && value.completed_badges <= value.unlocked_badges
   && value.collected_badges === value.completed_badges && value.exhibiting_badges <= value.collected_badges,
 "认证计数不满足游戏进度约束");
-export const activitySchema = z.strictObject({ map: mapSchema, progress: progressSummarySchema.nullable() })
+const visitSummarySchema = z.strictObject({
+  total_visits: count, participating_badges: count,
+  sites: z.array(z.strictObject({ site_id: siteId, visits: count })).length(3),
+  interval_samples: count, average_scan_interval_seconds: z.number().nonnegative().nullable(),
+  excluded_untrusted_events: count, excluded_future_events: count,
+}).refine(value => new Set(value.sites.map(site => site.site_id)).size === 3
+  && value.sites.reduce((total, site) => total + site.visits, 0) === value.total_visits
+  && value.participating_badges <= value.total_visits
+  && value.interval_samples === value.total_visits - value.participating_badges
+  && (value.interval_samples === 0) === (value.average_scan_interval_seconds === null), "到访汇总计数或间隔样本不一致");
+export const activitySchema = z.strictObject({ map: mapSchema, visits: visitSummarySchema, progress: progressSummarySchema.nullable() })
   .refine(value => (value.map.source === "generated_simulation") === (value.progress === null),
     "模拟来源不能包含实物游戏进度");
 export type ActivitySnapshot = z.infer<typeof activitySchema>;

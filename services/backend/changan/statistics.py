@@ -4,10 +4,26 @@ from datetime import datetime, timedelta
 
 from .models import (
     HeartbeatReceipt, HeatThresholds, MapSnapshot, SiteId, SiteStatistics, Source,
-    TransitionCount, TrendPoint, Visit,
+    TransitionCount, TrendPoint, Visit, VisitSummary, SiteVisitTotal,
 )
 
 SITES: tuple[SiteId, ...] = ("A", "B", "C")
+
+
+def summarize_visits(visits: list[Visit], now: datetime, source: Source) -> VisitSummary:
+    records = [visit for visit in visits if visit.source == source and visit.session_id == "demo-001"]
+    trusted = [visit for visit in records if visit.time_quality == "synced" and visit.captured_at <= now]
+    ordered = sorted(trusted, key=lambda visit: (visit.badge_id, visit.captured_at, visit.event_id))
+    intervals = [(right.captured_at - left.captured_at).total_seconds()
+                 for left, right in zip(ordered, ordered[1:]) if left.badge_id == right.badge_id]
+    return VisitSummary(
+        total_visits=len(trusted), participating_badges=len({visit.badge_id for visit in trusted}),
+        sites=[SiteVisitTotal(site_id=site, visits=sum(visit.site_id == site for visit in trusted)) for site in SITES],
+        interval_samples=len(intervals),
+        average_scan_interval_seconds=sum(intervals) / len(intervals) if intervals else None,
+        excluded_untrusted_events=sum(visit.time_quality == "untrusted" for visit in records),
+        excluded_future_events=sum(visit.time_quality == "synced" and visit.captured_at > now for visit in records),
+    )
 
 
 def count_badges(visits: list[Visit], start: datetime, end: datetime) -> int:

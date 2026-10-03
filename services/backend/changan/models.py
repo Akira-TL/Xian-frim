@@ -180,6 +180,22 @@ class DeviceProgressSummary(Contract):
     last_verified_at: datetime | None = None
 
 
+class SiteVisitTotal(Contract):
+    site_id: SiteId
+    visits: Annotated[int, Field(ge=0)]
+
+
+class VisitSummary(Contract):
+    total_visits: Annotated[int, Field(ge=0)]
+    participating_badges: Annotated[int, Field(ge=0)]
+    sites: list[SiteVisitTotal]
+    interval_samples: Annotated[int, Field(ge=0)]
+    average_scan_interval_seconds: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None
+    excluded_untrusted_events: Annotated[int, Field(ge=0)]
+    excluded_future_events: Annotated[int, Field(ge=0)]
+
+
 class ActivitySnapshot(Contract):
     map: MapSnapshot
+    visits: VisitSummary
     progress: DeviceProgressSummary | None

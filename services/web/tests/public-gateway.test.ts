@@ -19,6 +19,9 @@ test("免登录活动查询保留空数据与模拟来源边界", async () => {
   const snapshot = await createApi(`${web}/api/v1`).activity("physical_scan_simulated_site");
   assert.ok(snapshot.progress);
   assert.equal(snapshot.progress.verified_badges, 0);
+  assert.equal(snapshot.visits.total_visits, 0);
+  assert.equal(snapshot.visits.participating_badges, 0);
+  assert.equal(snapshot.visits.average_scan_interval_seconds, null);
   assert.deepEqual(snapshot.map.sites.map(site => site.data_status),
     ["missing", "missing", "missing"]);
   const generated = await fetch(`${web}/api/v1/activity?source=generated_simulation`);
