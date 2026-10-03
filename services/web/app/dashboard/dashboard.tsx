@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
-import { sourceSchema, type ActivitySnapshot, type DataSource } from "../../lib/contracts";
+import { sourceSchema, type ActivitySnapshot, type DataSource, type SiteCatalog } from "../../lib/contracts";
 import ScenarioPanel from "./scenario-panel";
 import RecommendationChooser from "./recommendation-chooser";
+import SiteMap from "./site-map";
 
 const siteNames = { A: "秦俑工坊", B: "长安城门", C: "诗意庭院" };
 const statusNames = { fresh: "数据新鲜", stale: "数据已过时", missing: "尚无数据", untrusted: "时间不可靠" };
@@ -31,6 +32,19 @@ export default function Dashboard() {
   const [preparing, setPreparing] = useState(false);
   const [preparationNotice, setPreparationNotice] = useState("");
   const [batchId, setBatchId] = useState<string>();
+  const [catalog, setCatalog] = useState<SiteCatalog>();
+  const [catalogNotice, setCatalogNotice] = useState("正在读取节点位置配置");
+  useEffect(() => {
+    let active = true;
+    setCatalog(undefined);
+    setCatalogNotice("正在读取节点位置配置");
+    void api.sites().then(value => {
+      if (active) setCatalog(value);
+    }).catch(() => {
+      if (active) setCatalogNotice("节点配置读取失败，暂不绘制地图；可点击刷新重试，统计卡片仍可使用。");
+    });
+    return () => { active = false; };
+  }, [refresh]);
   async function prepareDemo() {
     if (preparing) return;
     setPreparing(true);
@@ -107,6 +121,7 @@ export default function Dashboard() {
       <section className={panel}>
         <h2 className="text-xl font-semibold">节点示意与近期热度</h2>
         <p className="mt-1 text-sm text-stone-600">最近五分钟的不同腰牌数；节点示意不代表真实地理坐标。演示阈值：低 0—{map.heat_thresholds.medium_min - 1}、中 {map.heat_thresholds.medium_min}—{map.heat_thresholds.high_min - 1}、高 {map.heat_thresholds.high_min} 及以上；不代表场地安全容量。超过九十秒未更新或时间不可靠显示数据不足。</p>
+        {catalog ? <SiteMap catalog={catalog} map={map} offline={offline} /> : <p role="status" className="mt-4 rounded-xl bg-stone-100 p-3">{catalogNotice}</p>}
         <div className="mt-4 grid gap-4 md:grid-cols-3">{map.sites.map(site => <article key={site.site_id}
           className={`rounded-xl border-2 p-4 ${heatStyles[site.heat]}`}>
           <h3 className="text-lg font-semibold">{site.site_id} · {siteNames[site.site_id]}</h3>
