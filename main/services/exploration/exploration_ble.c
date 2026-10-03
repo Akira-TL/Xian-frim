@@ -151,13 +151,18 @@ static int read_value(uint16_t connection, uint16_t handle,
     if (snapshot.screen >= EXPLORATION_SCREEN_COUNT) return BLE_ATT_ERR_UNLIKELY;
     // 实时遥测不替代签名进度，不改变既有版本1认证回执。
     char state[512];
+    static const char *const games[] = {"qin_formation", "gate_search", "poem_completion"};
+    if (snapshot.game >= GAME_COUNT) return BLE_ATT_ERR_UNLIKELY;
+    unsigned stage = snapshot.game == GAME_QIN ? 0 : snapshot.rounds[snapshot.game - 1].stage;
     int length = snprintf(state, sizeof(state),
-        "{\"v\":1,\"device_id\":\"%s\",\"session_id\":\"demo-001\","
-        "\"game_id\":\"qin_formation\",\"unlocked\":%s,\"completed\":%s,\"collected\":%s,\"exhibiting\":%s,"
-        "\"screen\":\"%s\",\"placed_mask\":%u,\"mistakes\":%u}",
-        device, progress.unlocked ? "true" : "false", progress.completed ? "true" : "false",
+        "{\"v\":2,\"device_id\":\"%s\",\"session_id\":\"demo-001\","
+        "\"game_id\":\"%s\",\"unlocked\":%s,\"completed\":%s,\"collected\":%s,\"exhibiting\":%s,"
+        "\"screen\":\"%s\",\"placed_mask\":%u,\"mistakes\":%u,"
+        "\"stage\":%u,\"bonus_collected\":%u,\"exhibit_game\":%u}",
+        device, games[snapshot.game], progress.unlocked ? "true" : "false", progress.completed ? "true" : "false",
         progress.collected ? "true" : "false", progress.exhibiting ? "true" : "false",
-        screens[snapshot.screen], snapshot.puzzle.placed_mask, snapshot.puzzle.mistakes);
+        screens[snapshot.screen], snapshot.puzzle.placed_mask, snapshot.puzzle.mistakes,
+        stage, snapshot.bonus_collected, snapshot.exhibit_game);
     if (length < 0 || length >= sizeof(state)) return BLE_ATT_ERR_INSUFFICIENT_RES;
     return os_mbuf_append(context->om, state, length) == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
 }

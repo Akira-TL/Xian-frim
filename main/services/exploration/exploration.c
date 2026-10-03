@@ -22,6 +22,78 @@ static saved_progress_t saved;
 static qin_progress_t progress;
 static qin_puzzle_t puzzle;
 static exploration_screen_t screen = EXPLORATION_COVER;
+static exploration_game_t game;
+static bonus_round_t rounds[2];
+typedef struct { uint8_t schema, collected, exhibit; } saved_bonus_t;
+static saved_bonus_t bonus = {.schema = 1, .exhibit = GAME_COUNT};
+
+static esp_err_t persist_bonus(const saved_bonus_t *next)
+{
+    esp_err_t error = nvs_set_blob(storage, "bonus", next, sizeof(*next));
+    return error == ESP_OK ? nvs_commit(storage) : error;
+}
+
+esp_err_t exploration_set_game(exploration_game_t value)
+{
+    if (value < GAME_QIN || value >= GAME_COUNT) return ESP_ERR_INVALID_ARG;
+    if (!ready) return ESP_ERR_INVALID_STATE;
+    xSemaphoreTake(mutex, portMAX_DELAY);
+    game = value;
+    xSemaphoreGive(mutex);
+    return ESP_OK;
+}
+
+esp_err_t exploration_bonus_begin(exploration_game_t value)
+{
+    if (!bonus_total(value)) return ESP_ERR_INVALID_ARG;
+    if (!ready) return ESP_ERR_INVALID_STATE;
+    xSemaphoreTake(mutex, portMAX_DELAY);
+    bonus_begin(&rounds[value - 1]);
+    xSemaphoreGive(mutex);
+    return ESP_OK;
+}
+
+esp_err_t exploration_bonus_answer(exploration_game_t value, uint8_t choice, bonus_result_t *result)
+{
+    if (!result || !bonus_total(value)) return ESP_ERR_INVALID_ARG;
+    if (!ready) return ESP_ERR_INVALID_STATE;
+    xSemaphoreTake(mutex, portMAX_DELAY);
+    bonus_round_t next_round = rounds[value - 1];
+    *result = bonus_answer(value, &next_round, choice);
+    saved_bonus_t next = bonus;
+    esp_err_t error = ESP_OK;
+    if (*result == BONUS_COMPLETED) {
+        next.collected |= 1u << (value - 1);
+        if (next.collected != bonus.collected) error = persist_bonus(&next);
+    }
+    if (error == ESP_OK) {
+        rounds[value - 1] = next_round;
+        bonus = next;
+    }
+    xSemaphoreGive(mutex);
+    return error;
+}
+
+esp_err_t exploration_display_game(exploration_game_t value)
+{
+    if (value < GAME_QIN || value >= GAME_COUNT) return ESP_ERR_INVALID_ARG;
+    if (!ready) return ESP_ERR_INVALID_STATE;
+    // 秦俑展示仍走既有持久化认证链路；新增本地奖励不改变该链路。
+    if (value == GAME_QIN) {
+        esp_err_t error = exploration_exhibit();
+        if (error != ESP_OK) return error;
+    }
+    xSemaphoreTake(mutex, portMAX_DELAY);
+    esp_err_t error = ESP_ERR_INVALID_STATE;
+    if (value == GAME_QIN || (bonus.collected & (1u << (value - 1)))) {
+        saved_bonus_t next = bonus;
+        next.exhibit = value;
+        error = next.exhibit == bonus.exhibit ? ESP_OK : persist_bonus(&next);
+        if (error == ESP_OK) bonus = next;
+    }
+    xSemaphoreGive(mutex);
+    return error;
+}
 
 esp_err_t exploration_set_screen(exploration_screen_t value)
 {
@@ -39,6 +111,10 @@ esp_err_t exploration_snapshot(exploration_snapshot_t *snapshot)
     if (!ready) return ESP_ERR_INVALID_STATE;
     xSemaphoreTake(mutex, portMAX_DELAY);
     *snapshot = (exploration_snapshot_t){.progress = progress, .puzzle = puzzle, .screen = screen};
+    snapshot->game = game;
+    memcpy(snapshot->rounds, rounds, sizeof(rounds));
+    snapshot->bonus_collected = bonus.collected;
+    snapshot->exhibit_game = bonus.exhibit;
     xSemaphoreGive(mutex);
     return ESP_OK;
 }
@@ -87,6 +163,19 @@ esp_err_t exploration_init(void)
         return error;
     }
     progress = decode_flags(saved.flags);
+    length = sizeof(bonus);
+    error = nvs_get_blob(storage, "bonus", &bonus, &length);
+    if (error == ESP_ERR_NVS_NOT_FOUND) {
+        bonus = (saved_bonus_t){.schema = 1, .exhibit = progress.exhibiting ? GAME_QIN : GAME_COUNT};
+        error = persist_bonus(&bonus);
+    } else if (error == ESP_OK && (length != sizeof(bonus) || bonus.schema != 1 ||
+               bonus.collected > 3 || bonus.exhibit > GAME_COUNT ||
+               (bonus.exhibit == GAME_QIN && !progress.collected) ||
+               (bonus.exhibit > GAME_QIN && bonus.exhibit < GAME_COUNT &&
+                !(bonus.collected & (1u << (bonus.exhibit - 1)))))) {
+        error = ESP_ERR_INVALID_STATE;
+    }
+    if (error != ESP_OK) { nvs_close(storage); return error; }
     qin_puzzle_begin(&puzzle);
     ready = true;
     return ESP_OK;

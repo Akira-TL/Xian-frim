@@ -1,6 +1,7 @@
 #pragma once
 
 #include "qin_game.h"
+#include "bonus_game.h"
 #include "esp_err.h"
 
 #ifdef __cplusplus
@@ -20,11 +21,19 @@ typedef struct {
     qin_progress_t progress;
     qin_puzzle_t puzzle;
     exploration_screen_t screen;
+    exploration_game_t game;
+    bonus_round_t rounds[2];
+    uint8_t bonus_collected;
+    uint8_t exhibit_game; // GAME_COUNT 表示尚未设置展示。
 } exploration_snapshot_t;
 
 // 界面信息仅为当前会话遥测；不修改持久化进度或认证消息。
 esp_err_t exploration_set_screen(exploration_screen_t screen);
 esp_err_t exploration_snapshot(exploration_snapshot_t *snapshot);
+esp_err_t exploration_set_game(exploration_game_t game);
+esp_err_t exploration_bonus_begin(exploration_game_t game);
+esp_err_t exploration_bonus_answer(exploration_game_t game, uint8_t choice, bonus_result_t *result);
+esp_err_t exploration_display_game(exploration_game_t game);
 
 esp_err_t exploration_init(void);
 esp_err_t exploration_get(qin_progress_t *progress, qin_puzzle_t *puzzle,
