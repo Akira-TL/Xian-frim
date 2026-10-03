@@ -1,220 +1,113 @@
 "use client";
-
 import { useCallback, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { api } from "../lib/api";
-import { badgeSchema, type Badge, type Command, type DeviceState, type Visit } from "../lib/contracts";
-import { BadgeControl, type ControlPhase } from "../lib/badge-control";
+import type { Badge, DeviceState, Visit } from "../lib/contracts";
+import { BadgeControl } from "../lib/badge-control";
 import { bluetoothSupport, connectBadge } from "../lib/web-bluetooth";
-import RecommendationPanel from "./recommendation-panel";
-import ActivityOverview from "./activity-overview";
-import Link from "next/link";
+import VisitorRecommendation from "./visitor-recommendation";
 
 const siteNames = { A: "秦俑工坊", B: "长安城门", C: "诗意庭院" };
-const commandNames = { pending: "待发送", sent: "已发送，执行未确认", confirmed: "设备已确认执行", unknown: "结果未确认", failed: "请求失败" };
-const sourceNames = { physical_scan_simulated_site: "实物扫码 · 模拟地点", generated_simulation: "生成模拟 · 不可控制实物",
-  interface_test: "接口联调测试 · 不计真实到访" };
-const buttonStyle = "rounded-xl bg-stone-800 px-4 py-3 text-white disabled:opacity-40";
-const phaseNames: Record<ControlPhase, string> = {
-  checking: "核对实物身份", authorizing: "取得后台授权", sending: "向设备写入请求",
-  sent: "已发送，尚未确认执行", verifying: "正在认证设备回执", confirmed: "设备进度已认证",
-};
-function time(value: string) { return new Date(value).toLocaleString("zh-CN", { hour12: false }); }
-
+type Tab = "explore" | "collection" | "route";
 export default function OperatorPanel() {
   const [badges, setBadges] = useState<Badge[]>([]);
   const [visits, setVisits] = useState<Visit[]>([]);
-  const [commands, setCommands] = useState<Command[]>([]);
+  const [badgeId, setBadgeId] = useState("");
+  const [tab, setTab] = useState<Tab>("explore");
   const [online, setOnline] = useState(false);
-  const [notice, setNotice] = useState("正在读取后台记录");
   const [busy, setBusy] = useState(false);
-  const locked = useRef(false);
-  const [selection, setSelection] = useState<string>();
-  const [badgeSelection, setBadgeSelection] = useState<string>();
+  const [connected, setConnected] = useState(false);
+  const [progress, setProgress] = useState<DeviceState>();
+  const [notice, setNotice] = useState("");
+  const [unsupported, setUnsupported] = useState<string>();
   const control = useRef<BadgeControl | undefined>(undefined);
   const generation = useRef(0);
-  const [connection, setConnection] = useState<{ badgeId: string; deviceId: string }>();
-  const [progress, setProgress] = useState<DeviceState>();
-  const [phase, setPhase] = useState<ControlPhase>();
-  const [unsupported, setUnsupported] = useState<string>();
-  const [registration, setRegistration] = useState<Badge>({ badge_id: "badge-001", display_number: "001", device_id: "" });
-  const selected = visits.find(visit => visit.event_id === selection);
-  const selectedBadge = badges.find(badge => badge.badge_id === (selected?.badge_id ?? badgeSelection));
-  const selectedCommand = commands.find(command => command.event_id === selection);
-
+  const locked = useRef(false);
+  const badge = badges.find(item => item.badge_id === badgeId);
+  const latestVisit = visits.filter(item => item.badge_id === badgeId && item.source !== "generated_simulation")
+    .sort((a, b) => Date.parse(b.captured_at) - Date.parse(a.captured_at))[0];
   function disconnect() {
     generation.current += 1; control.current?.close(); control.current = undefined;
-    setConnection(undefined); setProgress(undefined); setPhase(undefined);
+    setConnected(false); setProgress(undefined);
   }
-
-  async function connect() {
-    if (!selectedBadge) throw new Error("请先选择已登记腰牌");
-    const badge = selectedBadge;
-    disconnect();
-    const current = generation.current;
-    const link = await connectBadge(() => {
-      if (generation.current !== current) return;
-      disconnect(); setNotice("蓝牙已断开，结果未确认；请重连并先同步进度");
-    });
-    if (generation.current !== current) { link.close(); throw new Error("目标已变化，请重新连接"); }
-    const session = new BadgeControl(badge, link, api, { onPhase: value => {
-      if (generation.current === current) setPhase(value);
-    } });
-    control.current = session;
-    try {
-      const state = await session.sync();
-      if (generation.current !== current) throw new Error("连接已失效，请重新连接");
-      setConnection({ badgeId: badge.badge_id, deviceId: state.device_id }); setProgress(state);
-      setNotice("实物身份匹配，进度已认证同步；不会自动解锁游戏");
-    } catch (error) { disconnect(); throw error; }
-  }
-
-  async function deviceOperation(unlock: boolean) {
-    const session = control.current;
-    if (!session || !selectedBadge || connection?.badgeId !== selectedBadge.badge_id) throw new Error("请先连接对应腰牌");
-    if (unlock && !selected) throw new Error("解锁必须选择实物到访或接口测试记录");
-    const current = generation.current;
-    try {
-      const state = await (unlock && selected ? session.unlock(selected) : session.sync());
-      if (generation.current !== current) throw new Error("连接已失效，结果未确认");
-      setProgress(state);
-      setNotice(unlock ? "设备已确认解锁；请在腰牌上点击开始游戏" : "设备进度已通过认证并同步后台");
-    } catch (error) { disconnect(); throw error; }
-    // 列表刷新失败不能推翻已认证的设备回执，单独显示后台查询异常。
-    try { await refresh(); }
-    catch { setNotice("设备回执已认证，但列表刷新失败；请稍后刷新记录"); }
-  }
-
   const refresh = useCallback(async () => {
-    try {
-      const [registered, arrived, requested] = await Promise.all([api.badges(), api.visits(), api.commands()]);
-      setBadges(registered); setVisits(arrived); setCommands(requested); setOnline(true);
-    } catch (error) { setOnline(false); throw error; }
+    const [registered, arrived] = await Promise.all([api.badges(), api.visits()]);
+    setBadges(registered); setVisits(arrived); setOnline(true);
   }, []);
-
-  async function operate(action: () => Promise<void>) {
-    if (locked.current) return;
-    locked.current = true; setBusy(true);
-    try { await action(); }
-    catch (error) { setNotice(error instanceof Error ? error.message : "操作失败，结果未确认"); }
-    finally { locked.current = false; setBusy(false); }
-  }
-
   useEffect(() => {
     let active = true;
     setUnsupported(bluetoothSupport());
-    void refresh().then(() => { if (active) setNotice("演示免登录；选择腰牌核对进度，测试打卡后可联调解锁"); })
-      .catch(() => { if (active) { setOnline(false); setNotice("后台暂不可达，当前没有在线记录"); } });
-    return () => { active = false; generation.current += 1; control.current?.close(); control.current = undefined; };
+    const load = () => { void refresh().catch(() => { if (active) setOnline(false); }); };
+    load(); const timer = setInterval(load, 5000);
+    return () => { active = false; clearInterval(timer); generation.current += 1; control.current?.close(); };
   }, [refresh]);
-
-  return <main className="journey-shell mx-auto max-w-5xl px-4 py-5 sm:px-8 sm:py-8">
-    <header className="journey-hero mb-5 flex flex-wrap items-center justify-between gap-4">
-      <div><p className="journey-eyebrow">一枚腰牌 · 一程长安</p>
-        <h1 className="mt-2 text-4xl font-semibold">长安游迹</h1><p className="mt-2 text-sm text-stone-600">连接腰牌，开启你的文化探索 · 免登录演示</p></div>
-      <Link className="journey-link" href="/dashboard">查看活动看板 <span aria-hidden="true">↗</span></Link>
+  async function connect() {
+    if (!badge) throw new Error("请先选择腰牌");
+    disconnect(); const current = generation.current;
+    const link = await connectBadge(() => {
+      if (current === generation.current) { disconnect(); setNotice("连接已断开，请重新连接"); }
+    });
+    if (current !== generation.current) { link.close(); throw new Error("请重新选择腰牌"); }
+    const session = new BadgeControl(badge, link, api); control.current = session;
+    try {
+      const state = await session.sync();
+      if (current !== generation.current) throw new Error("连接已失效，请重试");
+      setProgress(state); setConnected(true); setNotice("");
+    } catch (error) { disconnect(); throw error; }
+  }
+  async function sync(unlock = false) {
+    const session = control.current;
+    if (!session || !connected) throw new Error("请先连接腰牌");
+    const current = generation.current;
+    try {
+      const state = await (unlock && latestVisit ? session.unlock(latestVisit) : session.sync());
+      if (current !== generation.current) throw new Error("连接已失效，请重试");
+      setProgress(state); setNotice(unlock ? "游戏已解锁，在腰牌上开始吧" : "进度已同步");
+    } catch (error) { disconnect(); throw error; }
+  }
+  async function operate(action: () => Promise<void>) {
+    if (locked.current) return;
+    locked.current = true; setBusy(true); setNotice("");
+    try { await action(); } catch (error) { setNotice(error instanceof Error ? error.message : "操作未完成，请重试"); }
+    finally { locked.current = false; setBusy(false); }
+  }
+  const steps = [{ name: "解锁", done: progress?.unlocked }, { name: "通关", done: progress?.completed },
+    { name: "收藏", done: progress?.collected }, { name: "展示", done: progress?.exhibiting }];
+  return <main className="visitor-app">
+    <header className="visitor-header"><h1>长安游迹</h1>
+      <Image src="/xks/images/changan-gate-v3.webp" width={780} height={260} alt="云山间的长安城门" priority className="visitor-landscape" />
     </header>
-    <section className="journey-connect mb-5 rounded-2xl bg-white p-5 sm:p-6" aria-label="腰牌连接与进度">
-      <div className="flex items-center justify-between gap-3"><h2 className="text-xl font-semibold">我的腰牌</h2>
-        <span className={`journey-status ${connection ? "is-connected" : ""}`}>{connection ? "身份已核对" : "待连接"}</span></div>
-      <p className="my-3 text-sm text-stone-600">选择编号并连接，查看游戏与收藏进度。</p>
-      <label className="block text-sm">选择已登记腰牌
-        <select aria-label="选择已登记腰牌" className="my-3 w-full rounded-lg border p-3"
-          value={selectedBadge?.badge_id ?? ""} disabled={busy || !online}
-          onChange={event => { if (!locked.current) { disconnect(); setSelection(undefined); setBadgeSelection(event.target.value); } }}>
-          <option value="">请选择腰牌</option>
-          {badges.map(badge => <option key={badge.badge_id} value={badge.badge_id}>{badge.display_number} 号腰牌</option>)}
-        </select>
-      </label>
-      <div className="journey-actions grid grid-cols-2 gap-3">
-        <button className={`${buttonStyle} journey-primary col-span-2`} disabled={busy || !!unsupported || !selectedBadge || !online}
-          onClick={() => void operate(connect)}>{busy && !connection ? "正在处理…" : "连接并核对身份"}</button>
-        <button className="journey-secondary" disabled={busy || !connection}
-          onClick={() => void operate(() => deviceOperation(false))}>同步进度</button>
-        <button className="journey-secondary" disabled={busy || !connection}
-          onClick={() => { disconnect(); setNotice("已主动断开；下次连接会先查询设备状态"); }}>断开设备</button>
-      </div>
-      <p className="mt-3 text-sm leading-6 text-stone-600" role="status">{notice}</p>
-      {unsupported && <p className="mt-3 text-sm text-amber-800">{unsupported}</p>}
-      <details className="journey-details mt-4"><summary>连接详情与演示调试</summary>
-        <div className="space-y-2 pt-3 text-sm leading-6">
-          <p>后台：{online ? "最近查询成功" : "未连接／记录可能过时"}</p>
-          <p className="break-all">设备：{connection ? connection.deviceId : "尚未匹配"}</p>
-          <p>执行：{phase ? phaseNames[phase] : "未核验"}</p>
-          <p>连接与查询不会自动解锁。测试打卡不代表真实扫码，不计真实到访。</p>
-          <div className="flex flex-wrap gap-3"><button className="journey-secondary" disabled={busy || !online || !selectedBadge}
-          onClick={() => void operate(async () => {
-            if (!selectedBadge) throw new Error("请先选择腰牌");
-            const result = await api.testVisit(selectedBadge.badge_id);
-            await refresh(); setSelection(result.visit.event_id);
-            setNotice("已创建 A 点接口测试记录，不计真实到访；连接核对身份后可解锁游戏");
-          })}>测试打卡（A 点）</button>
-          <button className="journey-secondary" disabled={busy} onClick={() => void operate(async () => { await refresh(); setNotice("记录已刷新"); })}>刷新记录</button></div>
-        </div>
-      </details>
-      {progress && <div className="journey-progress mt-4 rounded-xl p-4 text-sm leading-7">
-        <h3 className="mb-3 font-semibold">秦俑归阵 · 认证进度</h3>
-        <ol className="grid grid-cols-4 gap-2 text-center">{[
-          ["解锁", progress.unlocked], ["通关", progress.completed], ["收藏", progress.collected], ["展示", progress.exhibiting],
-        ].map(([name, done]) => <li key={String(name)} className={done ? "is-done" : ""}><span className="journey-step" aria-hidden="true">{done ? "✓" : "·"}</span>{name}<span className="block text-xs">{done ? "已确认" : "未完成"}</span></li>)}</ol>
-        <p className="mt-3 text-xs text-stone-600">最近认证：{time(progress.verified_at)}，不代表设备持续在线。</p>
-        <p className="mt-1 text-xs text-stone-600">已解锁游戏可离开手机，在腰牌上继续游玩。</p>
-      </div>}
+    <section className="visitor-badge" aria-label="我的腰牌">
+      <div className="visitor-card-heading"><h2>我的腰牌</h2><span className={connected ? "visitor-connected" : "visitor-muted"}>{connected ? "已连接" : "未连接"}</span></div>
+      <div className="visitor-connection-row"><select aria-label="选择腰牌编号" value={badgeId} disabled={busy || !online}
+        onChange={event => { if (!locked.current) { disconnect(); setBadgeId(event.target.value); setNotice(""); } }}>
+        <option value="">选择编号</option>
+        {badges.filter(item => /^esp32s3-[0-9a-f]{12}$/.test(item.device_id)).map(item => <option key={item.badge_id} value={item.badge_id}>{item.display_number} 号</option>)}
+      </select><button className="visitor-primary" disabled={busy || !badge || !online || !!unsupported}
+        onClick={() => void operate(connected ? () => sync() : connect)}>{busy ? "处理中…" : connected ? "同步进度" : "连接腰牌"}</button></div>
+      <ol className="visitor-steps">{steps.map(step => <li key={step.name}>
+        <input type="checkbox" checked={step.done === true} disabled aria-label={`${step.name}${step.done ? "已完成" : "未确认"}`} /><span>{step.name}</span>
+      </li>)}</ol>
+      {connected && !progress?.unlocked && latestVisit?.site_id === "A" && <button className="visitor-primary visitor-unlock" disabled={busy || !online}
+        onClick={() => void operate(() => sync(true))}>解锁秦俑归阵{latestVisit.source === "interface_test" ? "（演示）" : ""}</button>}
+      {(notice || unsupported || !online) && <p className="visitor-notice" role="status">{unsupported || notice || "网络暂不可用"}</p>}
     </section>
-    <details className="journey-overview mb-5 rounded-2xl bg-white p-5"><summary className="cursor-pointer font-semibold">沿途热度与活动概览</summary><div className="pt-4"><ActivityOverview /></div></details>
-    <div className="grid gap-5 md:grid-cols-2">
-      <section className="rounded-2xl bg-white p-5"><h2 className="text-xl font-semibold">到访记录</h2>
-        <p className="my-3 text-sm text-stone-600">真实扫码、接口测试与生成模拟分别标注；A 点实物到访或接口测试可解锁，生成模拟不可控制设备。</p>
-        {!visits.length && <p className="py-8 text-stone-500">暂无到访。等待景区终端按接口上报。</p>}
-        <ul className="journey-visits space-y-3">{visits.map(visit => {
-          const badge = badges.find(item => item.badge_id === visit.badge_id);
-          const command = commands.find(item => item.event_id === visit.event_id);
-          return <li key={visit.event_id}><button disabled={busy} aria-pressed={selection === visit.event_id}
-            onClick={() => { if (!locked.current && selection !== visit.event_id) { disconnect(); setSelection(visit.event_id); } }}
-            className={`w-full rounded-xl border p-4 text-left ${selection === visit.event_id ? "border-stone-800 bg-stone-100" : "border-stone-200"}`}>
-            <span className="font-semibold">{badge?.display_number ?? visit.badge_id} 号 · {siteNames[visit.site_id]}</span>
-            <span className="mt-2 block text-sm">{sourceNames[visit.source]}</span>
-            <span className="mt-1 block text-sm text-stone-600">{time(visit.captured_at)}{visit.time_quality === "untrusted" ? " · 时间未校准" : ""}</span>
-            <span className="mt-1 block text-sm">{command ? commandNames[command.status] : "尚未创建解锁请求"}</span>
-          </button></li>;
-        })}</ul>
-      </section>
-      <section className="rounded-2xl bg-white p-5"><h2 className="text-xl font-semibold">单次到访</h2>
-        {selected ? <div className="mt-4 space-y-3 break-words">
-          <p>{selectedBadge?.display_number ?? selected.badge_id} 号 · {siteNames[selected.site_id]}</p>
-          <p className="text-sm">登记身份：{selectedBadge?.device_id ?? "未找到登记"}</p>
-          <p className="text-sm">事件：{selected.event_id}</p>
-          <p>{selectedCommand ? commandNames[selectedCommand.status] : "待核对实物设备"}</p>
-          {selectedCommand && <p className="text-sm">请求有效期至 {time(selectedCommand.expires_at)}；过期后先查询状态，未解锁则需新的实物到访。</p>}
-          <div className="flex flex-wrap gap-3 pt-2">
-            <button className={buttonStyle} disabled={busy || !online || !control.current?.ready
-              || connection?.badgeId !== selected.badge_id || selected.source === "generated_simulation"
-              || selected.site_id !== "A" || !!progress?.unlocked
-              || !!(selectedCommand && Date.parse(selectedCommand.expires_at) <= Date.now())}
-              onClick={() => void operate(() => deviceOperation(true))}>解锁本点游戏</button>
-          </div>
-          {selected.source === "generated_simulation" && <p className="text-sm text-amber-800">生成模拟只供查看，禁止控制实物腰牌。</p>}
-          {selected.source === "interface_test" && <p className="text-sm text-amber-800">接口联调测试，不代表真实扫码。解锁仍需实物身份核对及认证回执。</p>}
-          {selected.site_id !== "A" && <p className="text-sm text-stone-600">当前仅实现 A 点《秦俑归阵》。</p>}
-          <RecommendationPanel key={selected.event_id} visit={selected} disabled={busy || !online} />
-        </div> : <p className="mt-8 text-stone-500">选择左侧一条记录以核对腰牌。</p>}
-      </section>
-    </div>
-    <details className="mt-6 rounded-2xl bg-white p-5"><summary className="cursor-pointer font-semibold">登记演示腰牌</summary>
-      <p className="my-4 text-sm leading-6 text-stone-600">登记绑定不可覆盖。请使用现场读取的出厂身份，不以广播名称替代。登记不产生到访或解锁。</p>
-      <form className="grid gap-4 sm:grid-cols-3" onSubmit={event => { event.preventDefault(); void operate(async () => {
-        const result = badgeSchema.safeParse(registration);
-        if (!result.success || !/^esp32s3-[0-9a-f]{12}$/.test(registration.device_id)) throw new Error("请填写有效腰牌编号及 ESP32-S3 出厂身份");
-        await api.register(result.data); await refresh(); setNotice("登记完成；仍需真实到访及现场身份核对");
-      }); }}>
-        <label className="text-sm">腰牌标识<input className="mt-2 w-full rounded-lg border p-3" value={registration.badge_id} disabled={busy}
-          onChange={event => setRegistration({ ...registration, badge_id: event.target.value })} required /></label>
-        <label className="text-sm">显示编号<input className="mt-2 w-full rounded-lg border p-3" value={registration.display_number} disabled={busy}
-          onChange={event => setRegistration({ ...registration, display_number: event.target.value })} required /></label>
-        <label className="text-sm">实物出厂身份<input className="mt-2 w-full rounded-lg border p-3" placeholder="esp32s3-十二位小写十六进制" value={registration.device_id} disabled={busy}
-          onChange={event => setRegistration({ ...registration, device_id: event.target.value })} required /></label>
-        <button className={buttonStyle} disabled={busy} type="submit">登记绑定</button>
-      </form>
-    </details>
-    <footer className="mt-6 text-sm leading-6 text-stone-600">会话 demo-001 · 一次操作一枚腰牌。记录数不代表实时在场人数。手机蓝牙需要可信 HTTPS 与支持 Web Bluetooth 的安卓浏览器。</footer>
+    {tab === "explore" && <div className="visitor-feature-grid">
+      <button className="visitor-feature visitor-collection" onClick={() => setTab("collection")}><h2>我的收藏</h2>
+        <Image src="/xks/images/qin-guardian-v3.webp" width={240} height={240} alt="秦俑守护收藏" />
+        <span>{progress?.collected ? "秦俑守护" : progress ? "通关后获得" : "连接后查看"}</span></button>
+      <VisitorRecommendation key={latestVisit?.event_id ?? badgeId} visit={latestVisit} disabled={!online || busy || !badge} />
+    </div>}
+    {tab === "collection" && <section className="visitor-subpage"><h2>我的收藏</h2>
+      <Image src="/xks/images/qin-guardian-v3.webp" width={240} height={240} alt="秦俑守护" />
+      <h3>{progress?.collected ? "秦俑守护" : progress ? "完成秦俑归阵即可收藏" : "连接腰牌，查看你的收藏"}</h3>
+      {progress?.collected && <p>{progress.exhibiting ? "正在腰牌上展示" : "可在腰牌上设为展示"}</p>}
+    </section>}
+    {tab === "route" && <section className="visitor-route"><h2>探索路线</h2>
+      <Image src="/xks/images/changan-gate-v3.webp" width={780} height={260} alt="长安文化探索" />
+      <ol>{(["A", "B", "C"] as const).map(site => <li key={site}><span>{siteNames[site]}</span><small>{visits.some(item => item.badge_id === badgeId && item.site_id === site && item.source === "physical_scan_simulated_site") ? "已打卡" : "待探索"}</small></li>)}</ol><p>路线示意</p>
+    </section>}
+    <nav className="visitor-nav" aria-label="页面导航">{([["explore", "探索"], ["collection", "收藏"], ["route", "路线"]] as const)
+      .map(([value, name]) => <button key={value} aria-current={tab === value ? "page" : undefined} onClick={() => setTab(value)}>{name}</button>)}</nav>
   </main>;
 }
