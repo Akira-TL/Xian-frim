@@ -6,6 +6,11 @@ import type { DataSource, Visit } from "../../lib/contracts";
 import RecommendationPanel from "../recommendation-panel";
 
 const siteNames = { A: "秦俑工坊", B: "长安城门", C: "诗意庭院" };
+const sourceNames: Record<DataSource, string> = {
+  physical_scan_simulated_site: "实物扫码接口 · 模拟地点",
+  generated_simulation: "生成模拟数据，不具备实物解锁资格",
+  interface_test: "接口联调测试，不计真实到访",
+};
 
 export default function RecommendationChooser({ source, refresh }: { source: DataSource; refresh: number }) {
   const [visits, setVisits] = useState<Visit[]>([]);
@@ -40,7 +45,7 @@ export default function RecommendationChooser({ source, refresh }: { source: Dat
 
   return <section aria-label="看板下一站建议" className="rounded-2xl border border-stone-200 bg-white p-5">
     <h2 className="text-xl font-semibold">推荐依据选择</h2>
-    <p className="mt-2 text-sm text-stone-600">当前来源：{source === "generated_simulation" ? "生成模拟数据，不具备实物解锁资格" : "实物扫码接口 · 模拟地点"}。切换来源清除旧建议与人工选择。</p>
+    <p className="mt-2 text-sm text-stone-600">当前来源：{sourceNames[source]}。切换来源清除旧建议与人工选择。</p>
     <p className={`mt-2 text-sm ${offline ? "text-amber-800" : "text-stone-600"}`} role="status">{notice}</p>
     <label className="mt-4 block">选择腰牌到访
       <select aria-label="推荐依据到访" className="mt-2 w-full rounded-lg border bg-white p-2"
