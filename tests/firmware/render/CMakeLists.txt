@@ -33,3 +33,22 @@ target_include_directories(qin_render_test PRIVATE
     "${PROJECT_ROOT}/main/display/page/exploration"
     "${FIRMWARE_BUILD_DIR}/qin-assets")
 target_link_libraries(qin_render_test PRIVATE lvgl m)
+
+# 运行正式游戏页面；仅设备状态和亮度／音量存储接口使用测试替身。
+add_executable(qin_page_test qin_page_test.c
+    "${PROJECT_ROOT}/main/display/page/exploration/pg_exploration.c"
+    "${PROJECT_ROOT}/main/display/page/exploration/qin_slot.c"
+    "${PROJECT_ROOT}/main/display/page/exploration/qin_art.c"
+    "${PROJECT_ROOT}/main/services/exploration/qin_game.c"
+    "${PROJECT_ROOT}/main/display/assert/font/font_puhui_18_4.c")
+foreach(NAME head body legs reward)
+    target_sources(qin_page_test PRIVATE "${FIRMWARE_BUILD_DIR}/qin-assets/qin_${NAME}.c")
+endforeach()
+target_compile_definitions(qin_page_test PRIVATE SIMULATOR LV_LVGL_H_INCLUDE_SIMPLE)
+target_compile_options(qin_page_test PRIVATE -UNDEBUG)
+target_include_directories(qin_page_test PRIVATE
+    "${PROJECT_ROOT}/main" "${PROJECT_ROOT}/main/display"
+    "${PROJECT_ROOT}/main/display/page/exploration" "${FIRMWARE_BUILD_DIR}/qin-assets"
+    "${FIRMWARE_BUILD_DIR}/config"
+    "/home/Akira/github/esp-idf/components/esp_common/include")
+target_link_libraries(qin_page_test PRIVATE lvgl m)
