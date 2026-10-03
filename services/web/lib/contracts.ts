@@ -6,13 +6,14 @@ const date = z.iso.datetime({ offset: true });
 export const badgeSchema = z.strictObject({ badge_id: id, display_number: z.string().min(1).max(12), device_id: id });
 export const visitSchema = z.strictObject({
   event_id: commandId, session_id: z.literal("demo-001"), badge_id: id,
-  terminal_id: z.enum(["k230-001", "interface-test-001"]), site_id: z.enum(["A", "B", "C"]),
+  terminal_id: z.enum(["k230-001", "interface-test-001", "demo-generator-001"]), site_id: z.enum(["A", "B", "C"]),
   config_version: z.number().int().positive(), captured_at: date, received_at: date,
   time_quality: z.enum(["synced", "untrusted"]),
   source: z.enum(["physical_scan_simulated_site", "generated_simulation", "interface_test"]),
 }).refine(value => value.source === "interface_test"
   ? value.terminal_id === "interface-test-001" && value.site_id === "A" && value.config_version === 1
-  : value.terminal_id === "k230-001", "记录来源与终端身份不一致");
+  : value.terminal_id === "k230-001" || (value.source === "generated_simulation"
+    && value.terminal_id === "demo-generator-001"), "记录来源与终端身份不一致");
 export const commandSchema = z.strictObject({
   command_id: commandId, event_id: commandId, session_id: z.literal("demo-001"),
   badge_id: id, device_id: id, game_id: z.literal("qin_formation"),
