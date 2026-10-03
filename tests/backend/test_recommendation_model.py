@@ -246,6 +246,24 @@ def test_denial_in_previous_clause_does_not_allow_a_positive_completion_claim(tm
         assert client.get("/api/v1/unlock-commands", headers=operator()).text == "[]"
 
 
+@pytest.mark.parametrize("site", ["A", "B"])
+def test_visit_record_cannot_be_presented_as_verified_current_location(tmp_path: Path, site: str) -> None:
+    reason = f"优先选择与 A 可达且为当前所在位置的 {site}。"
+    with TestClient(create_app(tmp_path / "false-location.sqlite3", "operator-test", "terminal-test", lambda: NOW,
+                              recommendation_model=DeniedCompletionModel(reason))) as client:
+        register(client)
+        post_scan(client, scan())
+        refresh_site(client, "B")
+        response = client.post("/api/v1/recommendations",
+                               content='{"badge_id":"badge-001","event_id":"scan-001"}', headers=operator())
+        assert response.status_code == 200
+        result = RecommendationResult.model_validate_json(response.text)
+        assert result.source == "rule_fallback" and result.fallback_reason == "invalid_output"
+        assert result.input.selected_visit_site == "A"
+        assert "当前所在位置" not in result.operator_reason
+        assert client.get("/api/v1/unlock-commands", headers=operator()).text == "[]"
+
+
 @pytest.mark.parametrize("fault", ["non_json", "snapshot", "candidate", "blank", "long", "extra", "oversize"])
 def test_invalid_model_output_cannot_replace_valid_rule_or_unlock(tmp_path: Path, fault: str) -> None:
     with TestClient(create_app(tmp_path / "invalid.sqlite3", "operator-test", "terminal-test",
