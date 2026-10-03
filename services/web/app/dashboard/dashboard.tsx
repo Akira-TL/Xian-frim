@@ -129,6 +129,6 @@ export default function Dashboard() {
     </>}
     <RecommendationChooser key={source} source={source} refresh={refresh} />
     <ScenarioPanel />
-    <footer className={panel}>当前 AI 未配置；规则建议明确标注来源。情景推演与到访观测、游戏进度完全独立。</footer>
+    <footer className={panel}>推荐按实际结果标注模型来源、规则降级或无有效候选。情景推演与到访观测、游戏进度完全独立。</footer>
   </main>;
 }

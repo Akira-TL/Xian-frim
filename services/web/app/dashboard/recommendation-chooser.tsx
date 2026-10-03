@@ -54,6 +54,6 @@ export default function RecommendationChooser({ source, refresh }: { source: Dat
     </label>
     {!offline && visits.length === 0 && <p className="mt-3">当前来源暂无到访，不填充虚构推荐。</p>}
     {selected ? <div className="mt-4"><RecommendationPanel key={selected.event_id} visit={selected} disabled={offline} /></div>
-      : <p className="mt-3 text-sm text-stone-600">未选择可用记录；当前 AI 未配置，生成结果只会明确标注为规则建议或无有效候选。</p>}
+      : <p className="mt-3 text-sm text-stone-600">未选择可用记录；请选择后生成，结果按实际来源区分模型建议、规则降级或无有效候选。</p>}
   </section>;
 }
