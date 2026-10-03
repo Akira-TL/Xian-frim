@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="770" viewBox="0 0 1100 770" role="img" aria-labelledby="title desc">
+  <title id="title">长安游迹比赛版系统职责图</title>
+  <desc id="desc">手机通过网页服务访问后台并转发腰牌认证消息。后台记录和统计、调用DeepSeek。电脑读取同一后台。K230只交付对接契约。</desc>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#57534e"/></marker></defs>
+  <rect width="1100" height="770" fill="#fafaf9"/>
+  <g font-family="sans-serif" fill="#292524">
+    <text x="40" y="44" font-size="28" font-weight="600">长安游迹 · 当前系统职责</text>
+    <text x="40" y="76" font-size="16">实线：已实现链路；虚线：对接契约。请求、发送和执行确认是不同状态。</text>
+    <g fill="white" stroke="#a8a29e" stroke-width="2">
+      <rect x="40" y="120" width="320" height="130" rx="16"/><rect x="430" y="120" width="300" height="130" rx="16"/>
+      <rect x="800" y="120" width="260" height="130" rx="16"/><rect x="40" y="360" width="320" height="140" rx="16"/>
+      <rect x="430" y="360" width="300" height="150" rx="16"/><rect x="800" y="360" width="260" height="150" rx="16"/>
+      <rect x="430" y="610" width="300" height="100" rx="16"/><rect x="40" y="600" width="320" height="120" rx="16" stroke-dasharray="8 6"/>
+    </g>
+    <g font-size="21" font-weight="600"><text x="60" y="153">安卓手机网页</text><text x="450" y="153">Next.js 网页服务</text><text x="820" y="153">电脑看板</text><text x="60" y="393">ESP32-S3 腰牌</text><text x="450" y="393">Python 后台</text><text x="820" y="393">DeepSeek</text><text x="450" y="643">SQLite</text><text x="60" y="633">K230／七英寸屏</text></g>
+    <g font-size="17"><text x="60" y="187">免登录 · 到访处理 · 身份核对</text><text x="60" y="220">认证同步 · 活动概览 · 建议</text><text x="450" y="187">同源接口白名单</text><text x="450" y="220">内部凭据隔离 · 请求限制</text><text x="820" y="187">地图 · 汇总 · 观测趋势</text><text x="820" y="220">认证进度 · 建议 · 推演</text><text x="60" y="427">本地拖拽 · 通关 · 唯一收藏</text><text x="60" y="459">进度保存 · 展示 · 游戏设置</text><text x="450" y="427">去重 · 来源隔离 · 回执认证</text><text x="450" y="459">统计 · 候选过滤 · 输出校验</text><text x="450" y="491">独立情景推演 · 审计</text><text x="820" y="427">deepseek-flash</text><text x="820" y="459">只从合格节点生成建议</text><text x="820" y="491">失败标为规则降级或无建议</text><text x="450" y="680">到访 · 请求 · 认证状态 · 推荐</text><text x="60" y="667">扫码、驱动、程序由对接方负责</text><text x="60" y="699">本项目仅维护上报和查询契约</text></g>
+  </g>
+  <g fill="none" stroke="#57534e" stroke-width="2.5" marker-start="url(#arrow)" marker-end="url(#arrow)">
+    <path d="M360 185H430"/><path d="M730 185H800"/><path d="M200 250V360"/>
+    <path d="M580 250V360"/><path d="M730 435H800"/><path d="M580 510V610"/>
+    <path d="M360 660H395V550H460V510" stroke-dasharray="8 6"/>
+  </g>
+  <g font-family="sans-serif" font-size="15" fill="#57534e"><text x="362" y="172">HTTPS</text><text x="733" y="172">HTTPS</text><text x="210" y="306">蓝牙低功耗</text><text x="590" y="306">内部 HTTP</text><text x="733" y="422">HTTPS</text><text x="590" y="558">持久化</text><text x="40" y="754">固定演示会话；生成模拟不控制实物；统计不是现场人数；图中不包含密钥或控制凭证。</text></g>
+</svg>
