@@ -141,6 +141,9 @@ static int read_value(uint16_t connection, uint16_t handle,
         return os_mbuf_append(context->om, device, strlen(device)) == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
     }
     exploration_snapshot_t snapshot;
+    char session[EXPLORATION_SESSION_SIZE];
+    if (exploration_get(NULL, NULL, session) != ESP_OK || strcmp(session, "demo-001") != 0)
+        return BLE_ATT_ERR_UNLIKELY;
     if (exploration_snapshot(&snapshot) != ESP_OK) return BLE_ATT_ERR_UNLIKELY;
     qin_progress_t progress = snapshot.progress;
     static const char *const screens[] = {"cover", "selection", "intro", "playing", "result",
